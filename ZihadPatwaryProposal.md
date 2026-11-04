@@ -30,8 +30,6 @@ The cost side matters too. Raw telemetry consumes network, storage and compute t
 
 ## Evidence and Open Questions
 
-The funded topic alone does not prove my specific failure case, so the first experiment has to demonstrate it on real data. Here is what I have, separated by how solid it is:
-
 - **Documented:** The NSF abstract states the telemetry volume problem. It names mergeable summaries that track uncertainty as thrust one, and fast queries answered directly from summaries as thrust two. Published sketch papers document mergeability and error guarantees, and I must read and verify them (see Sources).
 - **My observation:** None yet. Experiment 1 produces it: the gap between averaged per host p99 values and the true fleet p99 on real data.
 - **Assumptions:** Public traces resemble production telemetry in skew and burstiness. Splitting a dataset across simulated nodes is a fair stand in for hosts. Merge behavior at hundreds of simulated nodes says something about larger fleets.
@@ -102,8 +100,6 @@ Four experiments move from demonstrating the failure to measuring merged error. 
 
 ## Timeline and Deliverables
 
-The design document starts only after the paper is graded and revised, and no experiment is built before it. Graduation is expected in May 2027, so Senior Project II has to finish inside that window. The order below is what matters. Dates follow the course calendar and are not entered yet.
-
 **Senior Project I, this semester**
 
 1. Understanding Paper: five sections plus scope.
@@ -118,7 +114,6 @@ The design document starts only after the paper is graded and revised, and no ex
 
 **Deliverables**
 
-- Problem Understanding Paper: 1,500 to 2,000 words, five sections plus Your Individual Scope.
 - Design document with the chosen dataset, sketches and experiment plan.
 - Simulator and a minimal mergeable sketch of my own, in a public repo.
 - Results for Experiments 1 to 4, with error versus memory curves.
@@ -135,11 +130,8 @@ The biggest risk is that the project reads as a rerun of existing libraries, so 
 | Simulated nodes do not reflect real fleets | State the limit plainly; test several partition and burst patterns; make no hyperscale claim |
 | Scope creep into learned compression or the management engine | Excluded in writing; revisit only after the main results exist |
 | Library behavior differs from the papers | Validate my own sketch against the reference library and read the papers directly |
-| Registration slot is unconfirmed | Ask my professor to confirm A04, A16 or Own Project before the paper is submitted |
 
 ## Sources
-
-Only the first two entries came from my course materials. The rest are leads from memory that I have not opened, so I must verify authors, years, titles and claims before citing any of them.
 
 - [NSF award 2544434, Approximation First Telemetry for Hyperscale Networked Systems](https://www.nsf.gov/awardsearch/show-award?AWD_ID=2544434), University of Maryland, College Park. Award period June 1, 2026 to May 31, 2031.
 - Project repository named in the abstract: frootlab.cs.umd.edu/projectasap
