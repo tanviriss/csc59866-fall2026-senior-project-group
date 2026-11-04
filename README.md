@@ -18,6 +18,3 @@ Read the full proposal: [ZihadPatwaryProposal.md](ZihadPatwaryProposal.md)
 - **Excluded:** learned compression, the configuration management engine, and any claim of true hyperscale. Scale is simulated.
 - **Deliverables:** a simulator, a minimal mergeable sketch of my own, error versus memory results, and a decision guide.
 
-## Status
-
-Proposal drafted on November 4, 2026. The design document starts after the Problem Understanding Paper is graded and revised.
