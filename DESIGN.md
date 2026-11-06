@@ -29,9 +29,9 @@ Writing the example also showed me that I need to clearly define fairness before
 
 **Current workflow:** First, a user submits a job and says how many GPUs it needs. The scheduler then puts the job into a queue. When enough GPUs become available, the next job starts running. After it finishes, the results are returned to the user. The main problem happens when deciding which job should run next. Slurm, a widely used scheduler, uses first-in, first-out (FIFO) ordering by default ([SchedMD, 2019](https://slurm.schedmd.com/SLUG19/Priority_and_Fair_Trees.pdf)), which means jobs are mainly started based on when they were submitted.
 
-**Scenario (illustrative, not observed):** Imagine an 8-GPU cluster shared by Ana, Ben, and Chen. At 9:00 a.m., Ben submits 20 jobs, with each job needing 4 GPUs for 6 hours. These jobs fill the cluster for about 60 hours. At 9:05 a.m., Ana submits a 30-minute job that only needs 1 GPU. Under FIFO, her job waits about two and a half days. No GPU is sitting idle, so the cluster looks efficient, but the result is still unfair.
+**Scenario:** Imagine an 8-GPU cluster shared by Ana, Ben, and Chen. At 9:00 a.m., Ben submits 20 jobs, with each job needing 4 GPUs for 6 hours. These jobs fill the cluster for about 60 hours. At 9:05 a.m., Ana submits a 30-minute job that only needs 1 GPU. Under FIFO, her job waits about two and a half days. No GPU is sitting idle, so the cluster looks efficient, but the result is still unfair.
 
-![Three users submit jobs into a first-in, first-out queue. Ben's 4-GPU jobs use all 8 GPUs while Ana's 1-GPU job waits in the queue.](assets/workflow.png)
+![Three users submit jobs into a first-in, first-out queue. Ben's 4-GPU jobs use all 8 GPUs while Ana's 1-GPU job waits in the queue.](workflow.png)
 
 **Figure 1.** The current workflow in this example. Since Ben's batch arrived first and uses all the GPUs, Ana's 30-minute job waits about 2.5 days. This waiting problem is what my project focuses on.
 
