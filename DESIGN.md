@@ -1,4 +1,3 @@
-[DESIGN.md](https://github.com/user-attachments/files/34510248/DESIGN.md)
 # **Trustworthy Drift Status for Terraform Projects**
 
 **Author:** Benny Wen  
