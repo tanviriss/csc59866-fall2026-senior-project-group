@@ -32,6 +32,8 @@ This first version covers Section 1 only. While writing the worked case I learne
 
 **Problem and affected people:** Engineers who run large online services watch one number to judge speed: the fleet p99, the latency that 99 percent of all requests beat. The difficulty is that each host measures its own requests, and the fleet number has to be assembled from many hosts that carry very different loads. If the assembly is wrong, the number is wrong, and people act on it.
 
+In one sentence: for an on call engineer reading a fleet dashboard, when hosts carry very different loads, averaging per host p99 values produces a wrong fleet p99, which leads to false alarms or missed slowdowns. My project will investigate whether merged quantile sketches give a fleet p99 close to the exact answer while using far less memory than keeping every request.
+
 | Who | How they use the fleet p99 | What goes wrong |
 |---|---|---|
 | On call reliability engineer | Decides whether an alert is real and whether to wake someone | An averaged value can invent a slowdown or hide a real one |
