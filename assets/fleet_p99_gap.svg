@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="640" viewBox="0 0 1200 640" xmlns="http://www.w3.org/2000/svg"><style>
+body{margin:0;background:#fff;font-family:Helvetica,Arial,sans-serif}
+text{font-family:Helvetica,Arial,sans-serif}
+</style>
+<text x="40" y="46" font-size="30" font-weight="700" fill="#1a1a1a">Same two hosts, two different fleet p99 numbers</text>
+<text x="40" y="78" font-size="20" fill="#555">Illustrative numbers. Host A served 1,000,000 requests and Host B served 1,000 requests in one hour.</text>
+<!-- guides -->
+<g stroke="#bbb" stroke-width="2" stroke-dasharray="6 6">
+<line x1="132" y1="150" x2="132" y2="440"/><line x1="574" y1="300" x2="574" y2="440" stroke="#e5a3a0"/><line x1="1016" y1="225" x2="1016" y2="440"/></g>
+<!-- rows -->
+<circle cx="132" cy="150" r="11" fill="#444"/>
+<text x="156" y="157" font-size="22" fill="#1a1a1a"><tspan font-weight="700">Host A local p99:</tspan> 50 ms</text>
+<circle cx="1016" cy="225" r="11" fill="#444"/>
+<text x="990" y="232" font-size="22" text-anchor="end" fill="#1a1a1a"><tspan font-weight="700">Host B local p99:</tspan> 900 ms</text>
+<rect x="562" y="288" width="24" height="24" fill="#b3261e"/>
+<text x="600" y="307" font-size="22" fill="#b3261e"><tspan font-weight="700">Reported by the dashboard:</tspan> 475 ms</text>
+<text x="600" y="334" font-size="20" fill="#b3261e">(the average of 50 and 900)</text>
+<polygon points="132,360 146,375 132,390 118,375" fill="#1e7a34"/>
+<text x="162" y="382" font-size="22" fill="#1e7a34"><tspan font-weight="700">True fleet p99:</tspan> about 50 ms</text>
+<text x="162" y="410" font-size="20" fill="#1e7a34">(all requests pooled)</text>
+<!-- gap bracket -->
+<g stroke="#b3261e" stroke-width="3"><line x1="132" y1="337" x2="574" y2="337"/><line x1="132" y1="329" x2="132" y2="345"/><line x1="574" y1="329" x2="574" y2="345"/></g>
+<text x="353" y="327" font-size="20" text-anchor="middle" font-weight="700" fill="#b3261e">425 ms too high</text>
+<!-- axis -->
+<line x1="80" y1="440" x2="1120" y2="440" stroke="#333" stroke-width="3"/>
+<g stroke="#333" stroke-width="2"><line x1="80" y1="440" x2="80" y2="450"/><line x1="184" y1="440" x2="184" y2="450"/><line x1="288" y1="440" x2="288" y2="450"/><line x1="392" y1="440" x2="392" y2="450"/><line x1="496" y1="440" x2="496" y2="450"/><line x1="600" y1="440" x2="600" y2="450"/><line x1="704" y1="440" x2="704" y2="450"/><line x1="808" y1="440" x2="808" y2="450"/><line x1="912" y1="440" x2="912" y2="450"/><line x1="1016" y1="440" x2="1016" y2="450"/><line x1="1120" y1="440" x2="1120" y2="450"/></g>
+<g font-size="18" fill="#333" text-anchor="middle"><text x="80" y="474">0</text><text x="184" y="474">100</text><text x="288" y="474">200</text><text x="392" y="474">300</text><text x="496" y="474">400</text><text x="600" y="474">500</text><text x="704" y="474">600</text><text x="808" y="474">700</text><text x="912" y="474">800</text><text x="1016" y="474">900</text><text x="1120" y="474">1000</text></g>
+<text x="1120" y="500" font-size="18" text-anchor="end" fill="#333">Latency in milliseconds</text>
+<!-- share bar -->
+<text x="80" y="540" font-size="20" font-weight="700" fill="#1a1a1a">Share of all requests</text>
+<rect x="80" y="552" width="1036" height="34" fill="#9aa0a6"/>
+<rect x="1116" y="552" width="4" height="34" fill="#b3261e"/>
+<text x="598" y="576" font-size="20" text-anchor="middle" fill="#111">Host A: 99.9 percent</text>
+<line x1="1118" y1="590" x2="1118" y2="604" stroke="#b3261e" stroke-width="3"/>
+<text x="1120" y="628" font-size="20" text-anchor="end" fill="#b3261e" font-weight="700">Host B: 0.1 percent, but half the weight in an average</text>
+</svg>
