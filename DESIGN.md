@@ -34,6 +34,15 @@ This first version covers Section 1 only. While writing the worked case I learne
 
 In one sentence: for an on call engineer reading a fleet dashboard, when hosts carry very different loads, averaging per host p99 values produces a wrong fleet p99, which leads to false alarms or missed slowdowns. My project will investigate whether merged quantile sketches give a fleet p99 close to the exact answer while using far less memory than keeping every request.
 
+| Term | Plain meaning | Example in this project |
+|---|---|---|
+| Host | One server that handles part of a service's requests and measures how long each one takes | Host A handles 1,000,000 requests in an hour |
+| Latency | Time from a request arriving to its answer leaving, in milliseconds (ms) | One request takes 42 ms |
+| p99 | The 99th percentile: 99 percent of requests are faster than this value | A host whose p99 is 50 ms answers 99 in 100 requests within 50 ms |
+| Fleet p99 | The p99 over all requests from all hosts together | The number shown on the monitoring dashboard |
+| Quantile sketch | A small summary of many latencies that can estimate any percentile within a stated error | A few kilobytes standing in for millions of measurements |
+| Mergeable | Two summaries can be combined into one summary of both hosts' data with no loss beyond the stated error | Host A's sketch plus Host B's sketch gives a fleet sketch |
+
 | Who | How they use the fleet p99 | What goes wrong |
 |---|---|---|
 | On call reliability engineer | Decides whether an alert is real and whether to wake someone | An averaged value can invent a slowdown or hide a real one |
@@ -46,7 +55,15 @@ In one sentence: for an on call engineer reading a fleet dashboard, when hosts c
 
 **Figure 1.** Averaging gives each host half the weight, but Host B serves only 0.1 percent of the requests, so the reported fleet p99 lands far from the true one.
 
-**Current workflow:** I have not observed a specific company's pipeline. Based on the sources in the Evidence table, there are three common routes from host measurements to a fleet number, and each has a catch. The difficulty occurs at the step where per host results are combined.
+**Current workflow:** This is the on call engineer's task, as I understand it from the sources below. I have not watched a real team do it, so the steps are an assumption to confirm.
+
+1. Each host records the latency of every request it serves.
+2. Each host reports something about those latencies to the monitoring system on a fixed schedule.
+3. The monitoring system combines the host reports into one fleet p99. **The difficulty happens here.**
+4. The dashboard shows the fleet p99 and raises an alert if it crosses the latency target.
+5. The engineer reads the number and decides whether to investigate, wake a teammate or do nothing.
+
+Step 3 can be done three common ways, and each has a catch:
 
 1. **Average the local p99 values.** Each host computes its own p99 and a central system averages them. This is cheap, but it is wrong when hosts carry different loads.
 2. **Ship every measurement.** One place stores all requests and computes the p99 directly. The answer is exact, but the cost grows with traffic.
@@ -56,16 +73,19 @@ Figure 2 shows the three routes for the same two hosts, with a fourth route, mer
 
 ![Flowchart. Host A (1,000,000 requests, local p99 50 ms) and Host B (1,000 requests, local p99 900 ms) feed four ways to combine them. Route 1, averaging local p99 values, gives 475 ms, about 9.5 times too high. Route 2, shipping every measurement, gives about 50 ms exactly but costs more as traffic grows. Route 3, merging fixed bucket histograms, gives close to 50 ms with error that depends on the bucket layout. Route 4, merging mergeable sketches such as DDSketch, is drawn with a dashed outline as the project's focus, with its result still to be measured.](assets/fleet_p99_workflow.png)
 
-**Figure 2.** Four ways to combine per host measurements into a fleet p99, and what each gives for the Figure 1 example. The dashed boxes mark what this project adds and measures.
+**Figure 2.** Four ways to carry out step 3, and what each gives for the Figure 1 example. The dashed boxes mark what this project adds and measures. A Mermaid text version of this chart is in [assets/fleet_p99_workflow.mmd](assets/fleet_p99_workflow.mmd).
 
-**Evidence:** The table separates what the sources document from what I have only illustrated or assumed.
+**Why this is a distributed systems problem:** The hosts are separate computers that only share information by sending messages to the monitoring system. No single place sees every request unless every measurement is shipped, which is route 2 and the expensive one. So each host must send something smaller, and the design question is what that something should be so the pieces still combine into a correct fleet answer. Partial failure also matters: one host's report can arrive late or not at all while the others arrive. A fleet p99 built from some of the hosts should say which hosts it covers. I will treat that case in Section 8.
+
+**Evidence:** The table uses the handbook's labels. Documented means a source states it, Observed means I ran it myself, and Assumed means I rely on it but have not established it. Nothing is Observed yet.
 
 | Claim | Source | Status |
 |---|---|---|
 | Percentile values from separate hosts cannot simply be averaged. Prometheus says aggregating a summary's precomputed quantiles rarely makes sense, while histograms can be aggregated | [Prometheus documentation](https://prometheus.io/docs/practices/histograms/) | Documented |
 | Rank error guarantees can still allow large relative errors on skewed data. DDSketch is fully mergeable with a relative error guarantee | [Masson et al., 2019](https://www.vldb.org/pvldb/vol12/p2195-masson.pdf) | Documented |
 | Telemetry data can be too large to analyze in full when operators need real time answers, which motivates mergeable summaries | [NSF award 2544434](https://www.nsf.gov/awardsearch/show-award?AWD_ID=2544434) | Documented. It shows funded interest, not that my case occurs |
-| An averaged p99 misleads in the two host case above | Arithmetic on chosen numbers | Illustration. Nothing measured yet |
+| An averaged p99 misleads in the two host case above | Arithmetic on chosen numbers | Assumed. The numbers are illustrative, not measured |
+| On call engineers follow the five step workflow above | My reading of the sources, not a conversation with an engineer | Assumed |
 | Real host loads are uneven enough for the average to mislead | Not yet checked | Assumed |
 | Merged sketches stay close to the exact answer at a small memory size | Not yet tested | Assumed |
 
@@ -141,4 +161,6 @@ Figure 2 shows the three routes for the same two hosts, with a fourth route, mer
 | Item | Purpose |
 |---|---|
 | [assets/fleet_p99_gap.png](assets/fleet_p99_gap.png), source [assets/fleet_p99_gap.svg](assets/fleet_p99_gap.svg) | Figure 1, the averaging failure for two hosts |
-| [assets/fleet_p99_workflow.png](assets/fleet_p99_workflow.png), source [assets/fleet_p99_workflow.svg](assets/fleet_p99_workflow.svg) | Figure 2, the four ways to combine per host measurements |
+| [assets/fleet_p99_workflow.png](assets/fleet_p99_workflow.png), source [assets/fleet_p99_workflow.svg](assets/fleet_p99_workflow.svg), Mermaid text [assets/fleet_p99_workflow.mmd](assets/fleet_p99_workflow.mmd) | Figure 2, the four ways to combine per host measurements |
+
+No evidence directory exists yet because nothing has been measured. Simulation output will go in `evidence/` starting in Assignment 5.
