@@ -79,8 +79,6 @@ I will cover mergeable summaries with error tracking and a simple query layer, w
 
 Tentative solution direction: a decision guide that says which summary to use for which data shape and accuracy target, backed by measured results.
 
-Open item: confirm with my professor which course list slot this registers under (A04, A16 or Own Project).
-
 ## Method and Experiments
 
 Four experiments move from demonstrating the failure to measuring merged error. Every result is compared with the exact answer computed on the full data.

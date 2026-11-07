@@ -2,7 +2,7 @@
 
 **Author:** Zihad Patwary  
 **Course:** CSC 59866  
-**Selected project and option:** NSF project 04, Approximation First Telemetry for Hyperscale Networked Systems (course slot to confirm: A04, A16 or Own Project)  
+**Selected project and option:** 04 CAREER: Approximation-First Telemetry for Hyperscale Networked Systems  
 **Current assignment:** 1  
 **Friday commit deadline:** November 6, 2026, at 11:59 p.m. New York time  
 **Monday presentation:** November 9, 2026, at 6:30 p.m. New York time  
