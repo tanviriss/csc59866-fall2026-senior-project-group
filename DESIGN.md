@@ -3,15 +3,11 @@
 **Author:** Zihad Patwary  
 **Course:** CSC 59866  
 **Selected project and option:** 04 CAREER: Approximation-First Telemetry for Hyperscale Networked Systems  
-**Current assignment:** 1  
-**Friday commit deadline:** November 6, 2026, at 11:59 p.m. New York time  
-**Monday presentation:** November 9, 2026, at 6:30 p.m. New York time  
-**Last updated:** November 6, 2026  
-**Document status:** Proposed
+**Current assignment:** 1
 
 ## Progress note
 
-This first version covers Section 1 only. While writing the worked case I learned that a fleet p99 cannot be rebuilt from per host p99 values, because request counts decide each host's weight. My [earlier proposal](ZihadPatwaryProposal.md) compared five approaches across four experiments, which is too much for this semester, so I narrowed the six week work to one comparison: averaged p99, a uniform sample and merged DDSketch summaries, each judged by relative error against the exact answer. The main open issue is whether public data exists with per request latencies and uneven host loads. No reviewer feedback exists yet, so none is addressed. Next I will write the Section 2 requirements and compare the candidate approaches in Section 3. Evidence so far is the worked case in Figure 1 and the sources in Section 12.
+This is the first version of the document. I started from the course template and wrote Section 1. Working through the example showed me the core difficulty: a fleet p99 cannot be rebuilt from each host's own p99, because the number of requests a host served decides how much it should count. My earlier proposal compared five approaches in four experiments, which is too much for six weeks, so this semester I will compare three ways of answering the fleet p99 against the exact answer. The main open issue is data, since I do not yet know of a public trace with per request latencies and uneven host traffic. There is no reviewer feedback yet. Next I will write the Section 2 requirements and draft the Section 3 comparison of approaches.
 
 ## Contents
 
@@ -30,137 +26,135 @@ This first version covers Section 1 only. While writing the worked case I learne
 
 ## 1 Problem research and scope
 
-**Problem and affected people:** Engineers who run large online services watch one number to judge speed: the fleet p99, the latency that 99 percent of all requests beat. The difficulty is that each host measures its own requests, and the fleet number has to be assembled from many hosts that carry very different loads. If the assembly is wrong, the number is wrong, and people act on it.
+**Problem and affected people:** Teams that run large online services judge speed with a number called the fleet p99. A p99 is the 99th percentile latency: 99 percent of requests finish faster than it. "Fleet" means all requests from all servers, called hosts, taken together. Each host only sees its own requests, so the fleet number has to be assembled from many hosts, and hosts rarely carry equal traffic. When the assembly is done the cheap way, the number can be badly wrong, and people make decisions on it.
 
-In one sentence: for an on call engineer reading a fleet dashboard, when hosts carry very different loads, averaging per host p99 values produces a wrong fleet p99, which leads to false alarms or missed slowdowns. My project will investigate whether merged quantile sketches give a fleet p99 close to the exact answer while using far less memory than keeping every request.
-
-| Term | Plain meaning | Example in this project |
+| Who | What they need from the fleet p99 | What a wrong number costs them |
 |---|---|---|
-| Host | One server that handles part of a service's requests and measures how long each one takes | Host A handles 1,000,000 requests in an hour |
-| Latency | Time from a request arriving to its answer leaving, in milliseconds (ms) | One request takes 42 ms |
-| p99 | The 99th percentile: 99 percent of requests are faster than this value | A host whose p99 is 50 ms answers 99 in 100 requests within 50 ms |
-| Fleet p99 | The p99 over all requests from all hosts together | The number shown on the monitoring dashboard |
-| Quantile sketch | A small summary of many latencies that can estimate any percentile within a stated error | A few kilobytes standing in for millions of measurements |
-| Mergeable | Two summaries can be combined into one summary of both hosts' data with no loss beyond the stated error | Host A's sketch plus Host B's sketch gives a fleet sketch |
+| On call engineer | To know whether users are really getting slow responses right now | A false alarm wakes someone for nothing, and a hidden slowdown goes unfixed |
+| Service owner | To check the service against its promised latency target | Reports that do not match what users experienced |
+| Monitoring platform team | A correct fleet number without storing every request | Exact answers cost bandwidth, storage and query time that grow with traffic |
 
-| Who | How they use the fleet p99 | What goes wrong |
+**Concrete scenario:** In one hour, Host A serves 1,000,000 requests with a local p99 of 50 milliseconds (ms). Host B serves 1,000 requests with a local p99 of 900 ms, perhaps because it is overloaded. The dashboard averages the two local values and shows (50 + 900) / 2 = 475 ms. That crosses a 300 ms alert threshold, so the on call engineer is paged. But Host B served only about 0.1 percent of all requests. If every request is pooled, the true fleet p99 is about 50 ms, so almost no users were slow and the alert was false. The reverse also happens: when one busy host is slow and several small hosts are fast, the average comes out low and hides a slowdown that most users feel. These numbers, including the threshold, are invented to show the effect and are not measurements. Figure 2 below draws the gap.
+
+In one sentence: for an on call engineer reading a fleet dashboard, uneven traffic across hosts makes an averaged fleet p99 wrong, which causes false alarms or missed slowdowns. My project will investigate whether merged quantile sketches, small summaries that hosts can send instead of raw measurements, give a fleet p99 close to the exact answer while using far less memory.
+
+**Current workflow:** Figure 1 shows the steps from measurement to decision as I understand them from the sources in Section 12. I have not watched a real team do this, so the steps are an assumption to confirm.
+
+1. **Record.** Each host times every request it serves.
+2. **Report.** Each host sends a report to the monitoring system on a fixed schedule.
+3. **Combine.** The monitoring system turns the host reports into one fleet p99. This is where the difficulty occurs.
+4. **Display.** The dashboard shows the number and raises an alert if it crosses the target.
+5. **Decide.** The engineer investigates, pages a teammate or waits.
+
+![Flowchart of five steps from left to right: Record, Report, Combine, Display and Decide. Step 3, Combine, is outlined in red and labeled as where the workflow fails. An arrow from step 3 leads to a panel listing four ways to combine host reports for the example in Section 1: averaging local p99 values gives 475 ms, a false alarm; shipping every measurement gives about 50 ms exactly but at a cost that grows with traffic; adding up fixed bucket histograms gives near 50 ms with error that depends on the buckets; merging quantile sketches, drawn with a dashed outline as this project, has its error still to be measured.](assets/workflow.png)
+
+**Figure 1.** The current workflow. Whatever step 3 produces is the only number the engineer sees in steps 4 and 5, so an error there passes straight into the decision. The dashed row is the option this project measures.
+
+The sources describe three common ways to do step 3. Averaging each host's p99 is cheap but wrong under uneven traffic. Sending every measurement to one place is exact but costly. Adding up histograms of fixed latency buckets is approximate, and its error depends on where the bucket edges fall. A fourth way, merging quantile sketches, is what this project studies.
+
+This is a distributed systems problem because the hosts are separate machines that share information only by sending messages. No single machine sees every request unless every request is shipped, which is the costly option. Each host must therefore send something smaller, and the design question is what that something should be so the pieces still add up to a correct fleet answer. A host's report can also arrive late or not at all while the others arrive. A fleet number built from only some hosts should say which hosts it covers, and I will return to that case in Section 8.
+
+**Evidence:** The table uses the handbook's labels. Documented means a source states it, and Assumed means I rely on it but have not established it. Nothing is labeled Observed yet, because that starts once the simulation runs.
+
+| Claim | Source | Label |
 |---|---|---|
-| On call reliability engineer | Decides whether an alert is real and whether to wake someone | An averaged value can invent a slowdown or hide a real one |
-| Service owner | Checks the service against a latency target | Reports a number that does not match what users experienced |
-| Monitoring platform team | Runs the pipeline that collects and stores measurements | Keeping every request is accurate but costs bandwidth, storage and query time |
-
-**Concrete scenario:** Two hosts serve one hour of traffic. Host A serves 1,000,000 requests and its local p99 is 50 ms. Host B serves 1,000 requests and its local p99 is 900 ms. A dashboard averages the two local values and reports (50 + 900) / 2 = 475 ms. Host B handles only about 0.1 percent of the requests, so the real fleet p99 stays close to Host A's, about 50 ms. The report is roughly 9.5 times too high, and an engineer may chase a slowdown that is not there. The numbers are chosen for illustration and are not measured. The opposite mistake also happens when a busy host hides a small slow one.
+| Precomputed percentiles from separate summaries generally cannot be combined meaningfully, while histogram bucket counts can be added across hosts | [Prometheus documentation](https://prometheus.io/docs/practices/histograms/) | Documented |
+| DDSketch can be merged and keeps a relative error guarantee, which sketches with only a rank error guarantee do not give on skewed data | [Masson, Rim and Lee, 2019](https://www.vldb.org/pvldb/vol12/p2195-masson.pdf) | Documented |
+| Monitoring data can be too large to analyze in full when operators need answers in real time | [NSF award 2544434](https://www.nsf.gov/awardsearch/show-award?AWD_ID=2544434) | Documented. It shows the research motivation, not that my scenario happens |
+| The two host scenario reports 475 ms against a true value near 50 ms | Arithmetic on invented numbers | Assumed |
+| Real host traffic is uneven enough for averaging to mislead | Not checked yet | Assumed |
+| Engineers follow the five steps in Figure 1 | My reading of the sources | Assumed |
 
 ![Number line from 0 to 1000 milliseconds. Host A's local p99 is 50 ms and Host B's is 900 ms. The dashboard reports 475 ms, which is 425 ms above the true fleet p99 of about 50 ms. A bar below shows Host A has 99.9 percent of requests and Host B has 0.1 percent.](assets/fleet_p99_gap.png)
 
-**Figure 1.** Averaging gives each host half the weight, but Host B serves only 0.1 percent of the requests, so the reported fleet p99 lands far from the true one.
+**Figure 2.** The scenario on a number line. Averaging gives each host half the weight, but Host B served only 0.1 percent of the requests, so the reported fleet p99 lands far from the true one.
 
-**Current workflow:** This is the on call engineer's task, as I understand it from the sources below. I have not watched a real team do it, so the steps are an assumption to confirm.
+**Six-week contribution:** A Python simulation that splits one stream of request latencies across several hosts with uneven traffic, then answers the fleet p99 three ways: averaging each host's p99, taking a uniform random sample, and merging one DDSketch per host. Each answer is compared with the exact p99 computed from all the data. The measure is relative error at p99, meaning the gap between the estimate and the exact value divided by the exact value, at several memory sizes. One student can do this because it needs one language, an existing open source DDSketch implementation, and public or synthetic data.
 
-1. Each host records the latency of every request it serves.
-2. Each host reports something about those latencies to the monitoring system on a fixed schedule.
-3. The monitoring system combines the host reports into one fleet p99. **The difficulty happens here.**
-4. The dashboard shows the fleet p99 and raises an alert if it crosses the latency target.
-5. The engineer reads the number and decides whether to investigate, wake a teammate or do nothing.
+**Semester II scope:** The completed project is a decision guide that says which summary suits which data shape and accuracy target, backed by measurements. It adds the KLL and t digest sketches, one minimal mergeable sketch that I write and validate myself, a simple query layer that answers questions from merged summaries, more hosts with bursty and skewed traffic, and a second dataset.
 
-Step 3 can be done three common ways, and each has a catch:
-
-1. **Average the local p99 values.** Each host computes its own p99 and a central system averages them. This is cheap, but it is wrong when hosts carry different loads.
-2. **Ship every measurement.** One place stores all requests and computes the p99 directly. The answer is exact, but the cost grows with traffic.
-3. **Merge fixed bucket histograms.** Hosts report counts per latency bucket, which can be added across hosts. The result is approximate, so the bucket layout matters. I still need to verify how much in Section 3.
-
-Figure 2 shows the three routes for the same two hosts, with a fourth route, merging mergeable sketches, as the part this project adds.
-
-![Flowchart. Host A (1,000,000 requests, local p99 50 ms) and Host B (1,000 requests, local p99 900 ms) feed four ways to combine them. Route 1, averaging local p99 values, gives 475 ms, about 9.5 times too high. Route 2, shipping every measurement, gives about 50 ms exactly but costs more as traffic grows. Route 3, merging fixed bucket histograms, gives close to 50 ms with error that depends on the bucket layout. Route 4, merging mergeable sketches such as DDSketch, is drawn with a dashed outline as the project's focus, with its result still to be measured.](assets/fleet_p99_workflow.png)
-
-**Figure 2.** Four ways to carry out step 3, and what each gives for the Figure 1 example. The dashed boxes mark what this project adds and measures. A Mermaid text version of this chart is in [assets/fleet_p99_workflow.mmd](assets/fleet_p99_workflow.mmd).
-
-**Why this is a distributed systems problem:** The hosts are separate computers that only share information by sending messages to the monitoring system. No single place sees every request unless every measurement is shipped, which is route 2 and the expensive one. So each host must send something smaller, and the design question is what that something should be so the pieces still combine into a correct fleet answer. Partial failure also matters: one host's report can arrive late or not at all while the others arrive. A fleet p99 built from some of the hosts should say which hosts it covers. I will treat that case in Section 8.
-
-**Evidence:** The table uses the handbook's labels. Documented means a source states it, Observed means I ran it myself, and Assumed means I rely on it but have not established it. Nothing is Observed yet.
-
-| Claim | Source | Status |
-|---|---|---|
-| Percentile values from separate hosts cannot simply be averaged. Prometheus says aggregating a summary's precomputed quantiles rarely makes sense, while histograms can be aggregated | [Prometheus documentation](https://prometheus.io/docs/practices/histograms/) | Documented |
-| Rank error guarantees can still allow large relative errors on skewed data. DDSketch is fully mergeable with a relative error guarantee | [Masson et al., 2019](https://www.vldb.org/pvldb/vol12/p2195-masson.pdf) | Documented |
-| Telemetry data can be too large to analyze in full when operators need real time answers, which motivates mergeable summaries | [NSF award 2544434](https://www.nsf.gov/awardsearch/show-award?AWD_ID=2544434) | Documented. It shows funded interest, not that my case occurs |
-| An averaged p99 misleads in the two host case above | Arithmetic on chosen numbers | Assumed. The numbers are illustrative, not measured |
-| On call engineers follow the five step workflow above | My reading of the sources, not a conversation with an engineer | Assumed |
-| Real host loads are uneven enough for the average to mislead | Not yet checked | Assumed |
-| Merged sketches stay close to the exact answer at a small memory size | Not yet tested | Assumed |
-
-**Six-week contribution:** I will build a small Python simulation that splits one latency stream across hosts with uneven loads. It compares three ways of answering the fleet p99: the average of per host p99 values, a uniform random sample, and merged DDSketch summaries. Each is measured against the exact p99 from all the data, using relative error at p99, at several memory sizes. This is manageable for one person because it needs one language, a public or synthetic latency stream, and an existing DDSketch implementation.
-
-**Semester II scope:** The goal is a decision guide for which summary suits which data shape. It adds KLL and t digest sketches, one minimal mergeable sketch that I write and validate myself, a simple query layer, a merge study with more nodes and bursty, skewed data, and a second dataset.
-
-**Exclusions:** Learned compression for long term storage, the configuration management engine, real network deployment, security monitoring, failure propagation across services, and any claim of true hyperscale. Scale is simulated by splitting data across nodes, and I will say so plainly.
+**Exclusions:** The NSF project has four research thrusts. My work sits inside the first, mergeable summaries that track their own error, and in Semester II part of the second, answering queries from summaries. I exclude the third and fourth thrusts, learned compression for long term storage and the engine that turns accuracy and cost goals into settings. I also exclude real network deployment, security monitoring and failure spread across services. I make no claim of true hyperscale: scale is simulated by splitting data across hosts, and the results will say so.
 
 ## 2 Requirements and system specification
 
-*Not started. Due in Assignment 2.*
+*Not due yet. To be completed in Assignment 2.*
 
 ## 3 Alternatives and selected solution
 
-*Not started. Draft due in Assignment 2, completed in Assignment 3.*
+*Not due yet. Drafted in Assignment 2 and completed in Assignment 3.*
 
 ## 4 Architectural design
 
-*Not started. Due in Assignment 3.*
+*Not due yet. To be completed in Assignment 3.*
 
 ## 5 Component design and interfaces
 
-*Not started. Due in Assignment 3.*
+*Not due yet. To be completed in Assignment 3.*
 
 ## 6 Data structure design
 
-*Not started. Due in Assignment 4.*
+*Not due yet. To be completed in Assignment 4.*
 
 ## 7 Algorithm design and execution
 
-*Not started. Due in Assignment 4.*
+*Not due yet. To be completed in Assignment 4.*
 
 ## 8 Failures and security
 
-*Not started. Due in Assignment 4.*
+*Not due yet. To be completed in Assignment 4.*
 
 ## 9 Implementation and feasibility
 
-*Not started. Begins in Assignment 3.*
+*Not due yet. Started in Assignment 3 and refined through Assignment 6.*
 
 ## 10 Testing and verification
 
-*Not started. Planned in Assignment 4.*
+*Not due yet. Planned in Assignment 4, with results in Assignments 5 and 6.*
 
 ## 11 Operation maintenance and future work
 
-*Not started. Drafted in Assignment 4.*
+*Not due yet. Drafted in Assignment 4 and completed in Assignment 6.*
 
 ## 12 Revision history and references
 
 | Revision date | Change to my design | Reason and evidence |
 |---|---|---|
-| November 6, 2026 | First version: Section 1, progress note and one open question | Narrowed the earlier [proposal](ZihadPatwaryProposal.md) to one comparison that fits six weeks. Evidence is the worked case in Figure 1 and the sources below |
+| November 6, 2026 | First version from the course template: Section 1, progress note and one open question | My earlier [proposal](ZihadPatwaryProposal.md) was too large for six weeks, so I narrowed it to one comparison. Evidence is the scenario in Figures 1 and 2 and the sources below |
 
 | Open question | Why it matters | Next action |
 |---|---|---|
-| Is there public data with per request latencies and uneven host loads? | Invented latencies may not show real skew, so results could look better or worse than reality | Read the Alibaba microservices trace description for response time fields and license terms. If it does not fit, use synthetic skewed streams and label them as synthetic |
+| Is there public data with per request latencies and uneven traffic across hosts? | Invented latencies may not show real skew, so results could look better or worse than reality | Read the Alibaba microservices trace description for response time fields and license terms. If it does not fit, generate synthetic skewed streams and label every result that uses them as synthetic |
 
-**Assistance and reuse:** Figures 1 and 2 were drawn for this document, and their editable sources are in the assets folder. Outside sources are listed below. The course policy on assistance still needs to be checked and stated here before this is final.
+**Assistance and reuse:** The document structure comes from the course design document template. Figures 1 and 2 were drawn for this document, and their editable sources are listed below. Outside sources are cited where they are used and listed in References.
 
 ### References
 
-| Source | What it supports | Checked |
+| Source | Claim it supports | Status |
 |---|---|---|
-| [Prometheus, Histograms and summaries](https://prometheus.io/docs/practices/histograms/) | The existing approach of merging histograms, and why summary quantiles do not combine | Page opened and wording confirmed |
-| [Masson, Rim and Lee, DDSketch, PVLDB 12(12), 2019](https://www.vldb.org/pvldb/vol12/p2195-masson.pdf) | The first sketch I will test | Found in search, not yet read in full |
-| [NSF award 2544434, University of Maryland, College Park](https://www.nsf.gov/awardsearch/show-award?AWD_ID=2544434) | The funded research source for the project | Link taken from the course abstracts |
-| [Alibaba cluster trace program](https://github.com/alibaba/clusterdata) | A possible public source of response time data | Found in search, not yet checked |
+| Prometheus Authors, [Histograms and summaries](https://prometheus.io/docs/practices/histograms/), Prometheus documentation, accessed November 6, 2026 | Histogram bucket counts can be added across hosts, while precomputed percentiles from summaries generally cannot be combined | Page read and wording checked |
+| Charles Masson, Jee E. Rim and Homin K. Lee, [DDSketch: A Fast and Fully-Mergeable Quantile Sketch with Relative-Error Guarantees](https://www.vldb.org/pvldb/vol12/p2195-masson.pdf), PVLDB 12(12), 2019 | DDSketch merges and keeps a relative error guarantee. It is the first sketch I will test | Found in search, full paper not yet read |
+| National Science Foundation, [award 2544434, CAREER: Approximation-First Telemetry for Hyperscale Networked Systems](https://www.nsf.gov/awardsearch/show-award?AWD_ID=2544434), University of Maryland, College Park, award period June 1, 2026 to May 31, 2031 | The research motivation and its four thrusts, used to bound my scope | Abstract read from the course handout. The award page itself did not load for me |
+| Alibaba Group, [cluster trace program](https://github.com/alibaba/clusterdata), GitHub repository | A possible public source of response time data | Found, not yet checked for fields or license |
 
 ### Supporting media and evidence
 
 | Item | Purpose |
 |---|---|
-| [assets/fleet_p99_gap.png](assets/fleet_p99_gap.png), source [assets/fleet_p99_gap.svg](assets/fleet_p99_gap.svg) | Figure 1, the averaging failure for two hosts |
-| [assets/fleet_p99_workflow.png](assets/fleet_p99_workflow.png), source [assets/fleet_p99_workflow.svg](assets/fleet_p99_workflow.svg), Mermaid text [assets/fleet_p99_workflow.mmd](assets/fleet_p99_workflow.mmd) | Figure 2, the four ways to combine per host measurements |
+| [assets/workflow.png](assets/workflow.png), with editable sources [assets/workflow.svg](assets/workflow.svg) and [assets/workflow.mmd](assets/workflow.mmd) | Figure 1, the current workflow and where it fails |
+| [assets/fleet_p99_gap.png](assets/fleet_p99_gap.png), with editable source [assets/fleet_p99_gap.svg](assets/fleet_p99_gap.svg) | Figure 2, the averaging error for two hosts |
 
-No evidence directory exists yet because nothing has been measured. Simulation output will go in `evidence/` starting in Assignment 5.
+There is no evidence directory yet because nothing has been measured. Simulation output will go in `evidence/` starting in Assignment 5.
+
+### Final document check
+
+- [ ] Terms and examples make the project understandable to a beginner.
+- [ ] All twelve sections contain project specific content.
+- [ ] Requirements connect to design and tests.
+- [ ] Architecture, components, data, and algorithms agree.
+- [ ] Targets and plans are separate from observations.
+- [ ] Tables, images, pseudocode, references, and evidence links render correctly.
+- [ ] Images have alternative text, captions, and readable labels.
+- [ ] Run instructions and evidence support reproduction.
+- [ ] I am prepared to present my work and orally review the same selected group mate.
+- [ ] Remaining work and maintenance needs are explicit.
+- [ ] Instructional placeholders are removed from the final submission.
