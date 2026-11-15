@@ -51,8 +51,8 @@ Here comes the problem. In one case, the connection to the cloud is lost and no 
 5. The engineer fixes the server or updates the files.
 
 The difficulty occurs at step 3. If the reading is lost, repeated, or outdated, the output in step 4 may be wrong or missing, and the engineer has no clear way to tell.
-
-**Diagram (workflow.png).** Configuration files and real servers both feed a drift check that produces a report of in sync, drifted, or unknown. Three places the reading from the real servers can go wrong, which are a lost connection, a repeated request, and an old answer.
+![](Workflow.png)
+**Workflow Diagram.** Configuration files and real servers both feed a drift check that produces a report of in sync, drifted, or unknown. Three places the reading from the real servers can go wrong, which are a lost connection, a repeated request, and an old answer.
 
 The drift check compares what should exist with what exists now. The reading from the real servers is the step my project focuses on, and it can fail in three ways.
 
