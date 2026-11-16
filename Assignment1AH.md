@@ -2,7 +2,7 @@
 
 ## Progress note
 
-This initial draft defines the project's intended users and separates the driver-facing application from the processing system behind it. The application will combine potential enforcement locations predicted from highway images with crowdsourced reports supplied through WzSabre. I have identified a narrow six-week investigation: process a fixed image batch with two workers and recover from a worker failure without creating duplicate stored results. The source review clarified that WzSabre describes itself as a SABRE plugin, so I should not describe it as an official Waze API. User demand and the benefit of combining predictions with reports remain assumptions. No classmate feedback has been incorporated yet. Next, I will confirm the integration interface, collect feedback on the example scenario, and establish a single-worker baseline.
+This revision keeps the driver-facing map as the longer-term goal and specifies the smaller distributed-processing experiment for this semester. I added testable requirements for submitting a fixed image batch, processing it, recovering from a worker crash, and storing one result per image and model version. I also compared a single-worker baseline with a queued two-worker approach. Performance and recovery thresholds are proposed, not measured. WzSabre integration and user demand remain unverified; no classmate feedback has been incorporated yet. Next, I will implement the baseline, verify the available integration interface, and collect feedback on the map scenario.
 
 ## 1 Problem research and scope
 
@@ -32,15 +32,83 @@ This initial draft defines the project's intended users and separates the driver
 *Figure 1. Proposed workflow connecting the driver's information needs to background image processing and a separate report-update path.*
 
 
+## 2 System specification
+
+**Scope of this specification:** These requirements apply to this semester's fixed-batch image-processing experiment, not the full driver-facing application planned for Semester II. The existing highway-image model supplies predictions; the experiment evaluates job processing and recovery rather than model accuracy.
+
+### Functional requirements
+
+| ID | Requirement | Concrete acceptance check |
+|---|---|---|
+| FR-1 | The system must accept a fixed batch of highway images and identify each image and model version. | Submit a test batch of 10 valid images; verify that all 10 appear in the processing record with their image identifiers and model version. |
+| FR-2 | The system must run the existing prediction model on each valid image in the batch. | Process a batch and verify that every completed image has a prediction associated with its image identifier and model version. |
+| FR-3 | The system must support processing the batch with two workers. | Start two workers, submit a batch with enough images for both, and verify from worker logs that both process at least one image. |
+| FR-4 | The system must recover unfinished work when one processing worker stops unexpectedly. | Stop a worker while it is processing an image; keep the remaining worker running and verify that the interrupted image eventually reaches a completed state. |
+| FR-5 | The system must make saved results and processing status available for inspection. | After processing, inspect the result view or records and identify completed, pending, or failed images and their saved predictions. |
+
+### Correctness and quality requirements
+
+| ID | Rule or target | Concrete acceptance check |
+|---|---|---|
+| CR-1 | For each image identifier and model version, the system must retain **at most one authoritative stored prediction**, even if processing is attempted more than once. | Force a retry of an image after an interrupted attempt; query stored results and verify that the image/model-version pair has no duplicate authoritative prediction. |
+| QT-1 | **Proposed:** Complete at least 95% of a valid 20-image batch within 120 seconds using two workers, with no simulated failures. | Run the same 20-image batch with two workers, measure elapsed time, and count completed images; report actual results against the proposed target. |
+| QT-2 | **Proposed:** After one worker crashes, complete its interrupted image within 60 seconds while the other worker remains available. | Kill one worker during processing, measure time until the interrupted image completes, and report the observed recovery time. |
+
+These targets are preliminary and may need adjustment after measuring the single-worker baseline and the existing model's inference time. The targets are not current results or real-time guarantees.
+
+### Assumptions and constraints
+
+- **Assumptions:** The existing model can run inference on the selected images; the test images have stable identifiers; the two workers can access the same image inputs and saved results; a worker failure can be simulated by stopping one worker process.
+- **Constraints:** Use a fixed image batch from one highway area and the existing model; limit the experiment to two workers and one simulated worker crash. A simple result view is sufficient. Live WzSabre integration, new model training, and recovery from broker, database, or whole-machine failures are outside this semester's experiment.
+- **Unresolved:** The exact WzSabre integration interface and whether drivers find the combined map useful still require investigation and feedback.
+
+### Example outcomes
+
+**Ordinary case:** Input: a batch containing image `highway-001` under model version `v1`. The system processes the image and saves one record with image identifier `highway-001`, model version `v1`, status `completed`, and the model's predicted labels (for example, `shoulder: true`, `gore_area: false`). The labels here are illustrative, not a verified prediction.
+
+**Unsuccessful attempt and recovery:** Input: the same kind of image job, but its worker crashes before the result is safely recorded. The attempt does not finish. The system makes the unfinished image available for another attempt; the surviving worker processes it, and the final stored results still contain at most one authoritative prediction for that image and model version. If recovery cannot complete, the job must remain visibly unfinished or failed rather than being shown as completed.
+
+## 3 Comparison of possible approaches
+
+The alternatives below are proposals to test, not a final architecture decision. Both use the existing model and a persistent result record so that the same requirements can be evaluated.
+
+| Requirement or tradeoff | Approach A: Single-worker baseline | Approach B: Work queue with two workers |
+|---|---|---|
+| FR-1: Accept a fixed image batch | Read the batch directly in one process | Submit image jobs to a shared queue |
+| FR-2: Run predictions | One process runs inference sequentially | Workers run inference on assigned images |
+| FR-3: Use two workers | Does not meet this requirement | Designed to meet it; verify using worker logs |
+| FR-4: Recover a worker crash | Needs restart and explicit tracking of unfinished images | Can reassign unfinished work after a worker crash, if acknowledgments and retries are configured correctly |
+| FR-5: Inspect status and results | Store status and predictions in persistent records | Store status and predictions in shared persistent records |
+| CR-1: One authoritative result per image and model version | Can enforce with a unique record key | Requires the same unique key and safe updates because retries or overlapping attempts may occur |
+| QT-1: Proposed batch completion target | Measure as a baseline; may be slower | Measure with two workers; queue overhead may offset gains for small batches |
+| QT-2: Proposed crash recovery target | Requires a restarted process or other recovery logic | Test whether the surviving worker finishes the interrupted job within the target |
+| Complexity | Fewer moving parts; easier to debug | More coordination, queue setup, and failure cases |
+
+**Approach A:** A single program loops through the fixed image batch, runs the model, and saves each result. It is the simplest way to establish inference time and validate output records. It does not by itself meet the two-worker requirement, and recovery would require additional bookkeeping or a restart procedure.
+
+**Approach B:** A producer submits image-processing jobs to a queue such as RabbitMQ. Two workers consume jobs, run the existing model, and write results to a shared persistent store. Workers acknowledge jobs only after their outcomes are safely handled. A uniqueness rule on the image identifier and model version protects the stored result when a job is retried. RabbitMQ's work-queue tutorial supports the feasibility of distributing tasks and redelivering unacknowledged messages; it does **not** prove this project's recovery time or prevent duplicate database records by itself.
+
+**Comparison status:** The single-worker approach is the baseline for measurement. The queued approach is a candidate for better throughput and worker-failure recovery, but its additional complexity must be justified by test evidence. The final choice will be made in Assignment 3.
+
+### Four design steps to develop next
+
+- **Architectural design:** At this step, I need to explain how batch submission, image-processing workers, the work queue if selected, and persistent results communicate.
+- **Component design:** At this step, I need to explain which component validates jobs, runs model inference, tracks unfinished work, and saves predictions.
+- **Data structure design:** At this step, I need to explain the image identifier, model version, job status, processing attempt, and stored prediction records.
+- **Algorithm design:** At this step, I need to explain the sequence for processing an image, detecting an unfinished attempt, retrying it, and safely recording one authoritative result.
+
+**Sources used in this comparison:** The existing highway-image model and data establish the available prediction workload, but not distributed-system performance. The [RabbitMQ work-queue tutorial](https://www.rabbitmq.com/tutorials/tutorial-two-python) explains worker distribution and unacknowledged-message recovery. The [WzSabre homepage](https://wzsabre.rocks/) supports the separate longer-term crowdsourced-report layer, not the implementation or performance of this semester's batch pipeline.
+
 ## 12 Revision history and references
 
 | Revision date | Change | Reason |
 |---|---|---|
 | November 6, 2026 | Initial problem statement and bounded scope | Assignment 1: explain the user need and this semester's contribution |
+| November 13, 2026 | Added testable requirements, proposed targets, examples, and comparison of two approaches | Assignment 2: specify required behavior and compare alternatives before selecting a design |
 
-**Open question:** Do drivers find predicted locations useful alongside current reports, and can they distinguish the two? Next step: show the scenario and map sketch to classmates who drive and record their feedback.
+**Open questions:** Do drivers find predicted locations useful alongside current reports, and can they distinguish the two? What are the baseline processing and recovery times? Next steps: show the map scenario to classmates who drive, measure the single-worker baseline, and test whether the proposed targets are realistic.
 
-**Assistance and reuse:** ChatGPT assisted with drafting, source checking, and the workflow figure. The project reuses my existing highway-image model and data.
+**Assistance and reuse:** ChatGPT assisted with drafting, source checking, the workflow figure, and the Assignment 2 requirements and comparison tables. The project reuses my existing highway-image model and data.
 
 ### References
 
