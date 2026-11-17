@@ -10,7 +10,7 @@ The project is a slice of NSF award 2544434, Approximation First Telemetry for H
 
 - [Problem Understanding Paper](Project_Selection/Final_Topic/Problem_Understanding_Paper.md) (Final Topic)
 - [Candidate Problem Background](Project_Selection/Final_Topic/Candidate_Problem_Background.md) (Final Topic)
-- [V1: Initial Topics](Project_Selection/README.md#v1-initial-topics), my earlier candidates
+- [V1: A15 Problem Understanding Paper](Project_Selection/V1_A15_Problem_Understanding_Paper.md) (initial topic)
 
 ## Design document
 
