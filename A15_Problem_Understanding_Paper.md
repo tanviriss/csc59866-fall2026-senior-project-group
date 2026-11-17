@@ -1,4 +1,4 @@
-# V1: A15 Problem Understanding Paper
+# A15 Problem Understanding Paper
 
 > **V1, initial topic.** This is the problem understanding paper for A15, the topic I worked on before choosing my final topic. It is kept as submitted (October 19, 2026) for the record and is no longer active. My final topic papers are [Final_Topic_Problem_Understanding_Paper.md](Final_Topic_Problem_Understanding_Paper.md) and [Final_Topic_Candidate_Problem_Background.md](Final_Topic_Candidate_Problem_Background.md).
 
