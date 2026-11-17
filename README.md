@@ -6,6 +6,12 @@ Approximation First Telemetry with Mergeable Quantile Summaries. A one student s
 
 The project is a slice of NSF award 2544434, Approximation First Telemetry for Hyperscale Networked Systems (University of Maryland, College Park), covering only the first two research thrusts: mergeable summaries with error tracking, and a simple query layer.
 
+## Project selection papers
+
+- [Problem Understanding Paper](Project_Selection/Final_Topic/Problem_Understanding_Paper.md) (Final Topic)
+- [Candidate Problem Background](Project_Selection/Final_Topic/Candidate_Problem_Background.md) (Final Topic)
+- [V1: Initial Topics](Project_Selection/README.md#v1-initial-topics), my earlier candidates
+
 ## Design document
 
 The weekly design document for the course is [DESIGN.md](DESIGN.md). Its figures and editable sources are in [assets/](assets/).
