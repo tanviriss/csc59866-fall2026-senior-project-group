@@ -110,8 +110,11 @@ The system is a simulator. Its user is me, or anyone repeating the study, acting
 | Q1 | Accuracy, proposed and not measured: with 64 hosts, skew 1, 8 KiB per host and 10,000,000 synthetic requests, at least one summary method gives a merged fleet p99 with a relative error of at most 1 percent in each of 5 seeds. The method used in the design is chosen in Assignment 3 | Run the setting with seeds 1 to 5 and record the largest relative error. A run that crashes or gives no answer counts as a miss | Section 10. Target only |
 | Q2 | Memory, proposed and not measured: in the Q1 setting, all host summaries together use at most 1 percent of the bytes needed to store every latency | Add the summary bytes across hosts and divide by 8 × N. By my arithmetic the target needs 64 × 8 KiB = 512 KiB against 80 MB, or about 0.7 percent | Section 10. Target only |
 | Q3 | Run time, proposed and not measured: the full synthetic grid below finishes within 30 minutes on my laptop | Time one full run of the grid from start to final result file | Section 9. Target only |
+| Q4 | Answer speed, proposed and not measured: with 256 hosts at 32 KiB each, the coordinator combines every summary and returns the fleet p99 in under 1 second on my laptop | Time from the arrival of the last summary to the returned answer, 10 times. Every run must finish in under 1 second. Repeat with twice the synthetic traffic to confirm the time does not depend on the number of requests | Sections 7 and 10. Target only |
 
 Why 1 percent: on the 300 ms alert threshold from Section 1, 1 percent is 3 ms, far smaller than the 425 ms error that averaging produced. If baseline runs show the target is too easy or impossible, I will revise it and record why in Section 12.
+
+Why 1 second for Q4: dashboards usually refresh every few seconds to every minute, so a fleet number that takes longer to build than the refresh is already old when the engineer reads it during an outage. The exact answer has to sort every request and slows down as traffic grows, while combining summaries depends only on the number of hosts and their budgets.
 
 ### Experiment settings
 
@@ -198,6 +201,7 @@ Each cell says whether the approach can meet the requirement and what the claim 
 | C2: no request lost or counted twice | Fails unless request counts are sent too (judgment) | Yes, counts are sent with the sample (judgment) | Yes, counts are the summary (documented) | Yes, counts are the summary (documented) |
 | Q1: at most 1 percent p99 error at 8 KiB, 64 hosts, skew 1 | Not expected, error is unbounded under skew (ordinary example) | Unlikely, since 1,024 values give about 10 tail values per host (judgment) | Depends on bucket edges (judgment) | Expected, since 512 bins exceed the 461 needed for α = 0.01 (arithmetic from the paper's bound) |
 | Q2: total summaries at most 1 percent of exact storage | Yes, far below (arithmetic) | Yes, at the same budget (arithmetic) | Yes, at the same budget (arithmetic) | Yes, at the same budget (arithmetic) |
+| Q4: fleet answer in under 1 second at 256 hosts and 32 KiB each | Yes, averaging 256 numbers (arithmetic) | Likely, since sorting up to 1,048,576 sampled values is a small job (judgment, to be measured) | Likely, since it adds bucket counts (judgment, to be measured) | Likely, since it adds up to 524,288 bin counts (judgment, to be measured) |
 | Effort in six weeks | Smallest | Small | Small, but the bucket edges are a design choice of their own | Moderate, since the package exists but the bin limit needs care |
 
 A second, smaller choice is how to simulate hosts. Hosts can be objects inside one program, or separate operating system processes that send serialized summaries to a coordinator. Separate processes would measure the real size of a sent summary and make host isolation (F2) automatic, at the cost of setup and slower runs at 256 hosts. Objects in one program are simpler and meet every requirement above if summary sizes are counted as defined in Section 2.
@@ -250,6 +254,7 @@ To be completed in Assignment 3: whether simulated hosts are objects in one prog
 |---|---|---|
 | November 6, 2026 | First version from the course template: Section 1, progress note and one open question | My earlier [proposal](ZihadPatwaryProposal.md) was too large for six weeks, so I narrowed it to one comparison. Evidence is the scenario in Figures 1 and 2 and the sources below |
 | November 14, 2026 | Assignment 2: wrote the Section 2 specification and a first Section 3 comparison. Revised Section 1 to fix the host counts (4 to 256) and memory budgets (512 bytes to 32 KiB) and to name the Alibaba 2022 microservices trace as real data | Tanvir Islam's review asked how many servers I simulate, how much memory I test and for real world data. The Alibaba trace description confirmed a per call response time and serving container. Writing C4 showed that DDSketch at α = 0.01 needs about 461 bins, more than the two smallest budgets allow |
+| November 16, 2026 | Added Q4, a proposed target for answer speed, and a matching row in the Section 3 comparison | Added after the Assignment 2 presentation so the specification also covers how fast a fleet answer must be ready, not only how accurate and how small it is |
 
 | Open question | Why it matters | Next action |
 |---|---|---|
