@@ -41,7 +41,7 @@ text{font-family:Helvetica,Arial,sans-serif}
 
 <rect x="40" y="296" width="1120" height="290" rx="8" fill="#fff" stroke="#bbb" stroke-width="2"/>
 <text x="60" y="328" font-size="20" font-weight="700" fill="#1a1a1a">What step 3 can produce for the example in Section 1</text>
-<text x="60" y="352" class="d">Host A: 1,000,000 requests, local p99 50 ms. Host B: 1,000 requests, local p99 900 ms. Illustrative numbers.</text>
+<text x="60" y="352" class="d">Host A: 1,000,000 requests, local p99 50 ms. Host B: 1,000 requests, local p99 900 ms. Synthetic data, fully listed in Section 2.</text>
 
 <g>
 <rect x="60" y="370" width="1080" height="46" rx="6" fill="#fdecea"/>
@@ -49,7 +49,7 @@ text{font-family:Helvetica,Arial,sans-serif}
 <text x="1124" y="400" class="r" text-anchor="end" fill="#b3261e" font-weight="700">475 ms, about 9.5 times too high: a false alarm</text>
 <rect x="60" y="422" width="1080" height="46" rx="6" fill="#e8f5ec"/>
 <text x="76" y="452" class="r"><tspan font-weight="700">Ship every measurement to one place</tspan></text>
-<text x="1124" y="452" class="r" text-anchor="end" fill="#1e7a34" font-weight="700">About 50 ms, exact, but cost grows with traffic</text>
+<text x="1124" y="452" class="r" text-anchor="end" fill="#1e7a34" font-weight="700">50 ms, exact, but cost grows with traffic</text>
 <rect x="60" y="474" width="1080" height="46" rx="6" fill="#fff8e6"/>
 <text x="76" y="504" class="r"><tspan font-weight="700">Add up fixed bucket histograms</tspan></text>
 <text x="1124" y="504" class="r" text-anchor="end" fill="#8a5a00" font-weight="700">Near 50 ms, error depends on the bucket layout</text>

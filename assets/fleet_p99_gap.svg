@@ -4,7 +4,7 @@ body{margin:0;background:#fff;font-family:Helvetica,Arial,sans-serif}
 text{font-family:Helvetica,Arial,sans-serif}
 </style>
 <text x="40" y="46" font-size="30" font-weight="700" fill="#1a1a1a">Same two hosts, two different fleet p99 numbers</text>
-<text x="40" y="78" font-size="20" fill="#555">Illustrative numbers. Host A served 1,000,000 requests and Host B served 1,000 requests in one hour.</text>
+<text x="40" y="78" font-size="20" fill="#555">Synthetic data, fully listed in Section 2. Host A served 1,000,000 requests and Host B 1,000 in one hour.</text>
 <!-- guides -->
 <g stroke="#bbb" stroke-width="2" stroke-dasharray="6 6">
 <line x1="132" y1="150" x2="132" y2="440"/><line x1="574" y1="300" x2="574" y2="440" stroke="#e5a3a0"/><line x1="1016" y1="225" x2="1016" y2="440"/></g>
@@ -17,7 +17,7 @@ text{font-family:Helvetica,Arial,sans-serif}
 <text x="600" y="307" font-size="22" fill="#b3261e"><tspan font-weight="700">Reported by the dashboard:</tspan> 475 ms</text>
 <text x="600" y="334" font-size="20" fill="#b3261e">(the average of 50 and 900)</text>
 <polygon points="132,360 146,375 132,390 118,375" fill="#1e7a34"/>
-<text x="162" y="382" font-size="22" fill="#1e7a34"><tspan font-weight="700">True fleet p99:</tspan> about 50 ms</text>
+<text x="162" y="382" font-size="22" fill="#1e7a34"><tspan font-weight="700">Exact fleet p99:</tspan> 50 ms</text>
 <text x="162" y="410" font-size="20" fill="#1e7a34">(all requests pooled)</text>
 <!-- gap bracket -->
 <g stroke="#b3261e" stroke-width="3"><line x1="132" y1="337" x2="574" y2="337"/><line x1="132" y1="329" x2="132" y2="345"/><line x1="574" y1="329" x2="574" y2="345"/></g>

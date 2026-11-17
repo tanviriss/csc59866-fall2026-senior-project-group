@@ -4,7 +4,7 @@ flowchart LR
  S3 --> S4[Step 4 Display: dashboard shows the number and may alert]
  S4 --> S5[Step 5 Decide: engineer investigates, pages someone or waits]
  S3 -.-> M1[Average local p99 values: 475 ms, false alarm]
- S3 -.-> M2[Ship every measurement: about 50 ms, exact, costly]
+ S3 -.-> M2[Ship every measurement: 50 ms, exact, costly]
  S3 -.-> M3[Add up fixed bucket histograms: near 50 ms, depends on buckets]
  S3 -.-> M4[Merge quantile sketches, this project: error to be measured]
  style S3 stroke:#b3261e,stroke-width:3px

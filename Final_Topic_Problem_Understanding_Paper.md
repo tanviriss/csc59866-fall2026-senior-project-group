@@ -13,7 +13,7 @@ Teams that run large online services judge speed by tail latency, not by the ave
 
 The problem is that the two common ways to assemble it each fail. The cheap way, averaging each host's own p99, gives a wrong number because percentiles do not add. The exact way, sending every measurement to one place and sorting it, is correct but costs bandwidth, storage and query time that grow with traffic. The NSF award this project is drawn from states the general version of this: data about traffic, resource use and failures can be too large to analyze in full when operators need answers in real time (National Science Foundation, n.d.).
 
-**Example.** In one hour, Host A serves 1,000,000 requests with a local p99 of 50 milliseconds (ms). Host B serves 1,000 requests with a local p99 of 900 ms because it is overloaded. A dashboard that averages the two shows (50 + 900) / 2 = 475 ms. That crosses a 300 ms alert threshold and pages the on call engineer. But Host B served only about 0.1 percent of the requests. Pooled together, the true fleet p99 is about 50 ms, so the alert was false. The reverse also happens: when one busy host is slow and several quiet hosts are fast, the average comes out low and hides a slowdown most users feel. These numbers are invented to show the effect and are not measurements.
+**Example.** In one hour, Host A serves 1,000,000 requests: 985,000 take 20 milliseconds (ms) and 15,000 take 50 ms, so its local p99 is 50 ms. Host B is overloaded and serves 1,000 requests: 980 take 100 ms and 20 take 900 ms, so its local p99 is 900 ms. A dashboard that averages the two shows (50 + 900) / 2 = 475 ms. That crosses a 300 ms alert threshold and pages the on call engineer. Pooling all 1,001,000 requests and taking the nearest rank p99, position ⌈0.99 × 1,001,000⌉ = 990,990 in sorted order, gives an exact fleet p99 of 50 ms, so the page was false. The reverse also happens: when one busy host is slow and several quiet hosts are fast, the average comes out low and hides a slowdown most users feel. These numbers and the threshold are synthetic, not measurements, but every request is listed, so anyone can recompute them.
 
 **Conditions.** The error appears when traffic is uneven across hosts, latencies have long tails, and each host can only afford a small report. With even traffic or small data, averaging or exact pooling both work well enough.
 
@@ -37,6 +37,8 @@ This is a distributed systems problem because hosts share information only by se
 
 **Technical documentation (Documented).** The Prometheus documentation states that precomputed percentiles from separate summaries generally cannot be combined meaningfully, while histogram bucket counts can be added across instances (Prometheus Authors, n.d.). That is the averaging failure, stated by a widely used monitoring tool.
 
+**Practice (Documented).** Real teams use the averaging calculation. The GOV.UK platform team fixed a Grafana dashboard whose request duration panel averaged Prometheus summary quantiles across pods, taking the mean of each pod's median, and moved the metric to histograms (GOV.UK, n.d.). Datadog's engineers write that many vendors compute percentiles per host and that combining those values across hosts misleads (Lin & Woo, 2025). Neither source reports how large the error was or which alerts it changed, so the error sizes in this paper are a synthetic evaluation until I measure them.
+
 **Research (Documented).** Agarwal et al. (2013) define a mergeable summary: two summaries combine into a summary of the combined data with the same error and size guarantees. Masson, Rim and Lee (2019) show that DDSketch is fully mergeable with a relative error guarantee and that sketches with only a rank error guarantee can give large relative errors on skewed data. Winchester et al. (2025) report that workloads in an Alibaba production deployment follow long tailed distributions.
 
 **Real data (Documented).** Alibaba's public 2022 microservices trace records the response time of each call and the container that served it, which lets me treat containers as hosts (Alibaba Group, n.d.).
@@ -49,7 +51,7 @@ This is a distributed systems problem because hosts share information only by se
 - Hosts simulated inside one program are a fair stand in for real hosts, because the question is what a summary can represent, not network timing.
 - Lognormal and Pareto latencies are a fair stand in for real latencies.
 
-**Missing evidence.** Telemetry from a real hyperscale fleet, the accuracy targets operators actually use, and real transfer costs, which I will only count in bytes.
+**Missing evidence.** Telemetry from a real hyperscale fleet, a case where an averaged number changed a page, the accuracy targets operators actually use, and real transfer costs, which I will only count in bytes.
 
 ### What solutions already exist?
 
@@ -67,11 +69,13 @@ The libraries exist, so the gap is not a missing algorithm. The open part is how
 
 ### What is the most important thing you still do not know?
 
-The main unknown is whether a merged fleet p99 built from small per host summaries stays within 1 percent of the exact value as the number of hosts grows and traffic becomes more uneven, at budgets from 512 bytes to 32 KiB per host.
+The main unknown is whether a merged fleet p99 built from small per host summaries stays accurate enough not to change the page decision as the number of hosts grows and traffic becomes more uneven, at budgets from 512 bytes to 32 KiB per host.
 
-**Experiment.** Split one stream of latencies across 4, 16, 64 and 256 simulated hosts with traffic skews from even to heavily uneven, plus a slow small host case like the example. Answer the fleet p99 three ways: averaging local p99 values, merging uniform samples, and merging one DDSketch per host. Score every answer against the exact p99 computed from all the data, over 5 random seeds.
+**Tolerance, fixed before testing.** The engineer is paged when the fleet p99 is above 300 ms. A method is acceptable if its p99 is within 1 percent of the exact value and all its summaries use at most 1 percent of the bytes needed to store every latency. Within 1 percent, an estimate can flip the page decision only when the exact p99 lies between about 297 and 303 ms (300 / 1.01 to 300 / 0.99). Outside that band any flip is a failure; inside it, flips are counted and reported.
 
-**Measurements.** Relative error at p50, p90, p99 and p99.9; summary bytes per host; total bytes against exact storage; time to merge.
+**Experiment.** Split one stream of latencies across 4, 16, 64 and 256 simulated hosts with traffic skews from even to heavily uneven, plus a slow small host case like the example and five threshold cases, where one synthetic stream is scaled so the exact fleet p99 is 240, 295, 300, 305 or 360 ms. Answer the fleet p99 three ways: averaging local p99 values, merging uniform samples, and merging one DDSketch per host. Score every answer against the exact p99 computed from all the data, over 5 random seeds.
+
+**Measurements.** Relative error at p50, p90, p99 and p99.9; whether each estimate gives the same page decision as the exact p99; summary bytes per host; total bytes against exact storage; time to merge.
 
 **How the result would influence the design.**
 
@@ -81,7 +85,7 @@ The main unknown is whether a merged fleet p99 built from small per host summari
 
 ### Your Individual Scope
 
-In six weeks I will build a Python simulation that partitions request latencies across simulated hosts, builds one summary per host within a memory budget, merges the summaries and scores the fleet answer against the exact one. I compare averaging, uniform sampling and DDSketch on synthetic heavy tailed data and on one slice of the Alibaba 2022 trace. In Semester II I add KLL and t digest, a minimal mergeable sketch I write myself, a simple query layer and a decision guide for which summary fits which data shape.
+In six weeks I will build a Python simulation that partitions request latencies across simulated hosts, builds one summary per host within a memory budget, merges the summaries and scores the fleet answer against the exact one. I compare averaging, uniform sampling and DDSketch on synthetic heavy tailed data and on one slice of the Alibaba 2022 trace. The result is meant to help an on call engineer decide whether fleet latency is above 300 ms: for each method, it shows whether that decision matches the exact one and what the summaries cost. In Semester II I add KLL and t digest, a minimal mergeable sketch I write myself, a simple query layer and a decision guide for which summary fits which data shape.
 
 I exclude the NSF project's third and fourth thrusts (learned compression and the engine that turns goals into settings), real network deployment, security monitoring and any claim of true hyperscale. Scale is simulated and the results will say so. One student can do this because it needs one language, an open source DDSketch package, public or generated data and one laptop, and every result has an exact answer to check against.
 
@@ -99,7 +103,11 @@ Dean, J., & Barroso, L. A. (2013). The tail at scale. *Communications of the ACM
 
 Dunning, T., & Ertl, O. (2019). *Computing extremely accurate quantiles using t-digests* (arXiv:1902.04023). arXiv. [https://arxiv.org/abs/1902.04023](https://arxiv.org/abs/1902.04023)
 
+GOV.UK. (n.d.). *Update request rates, errors, durations dashboard* (Pull Request No. 1302) [alphagov/govuk-helm-charts]. GitHub. Retrieved November 17, 2026, from [https://github.com/alphagov/govuk-helm-charts/pull/1302](https://github.com/alphagov/govuk-helm-charts/pull/1302)
+
 Karnin, Z., Lang, K., & Liberty, E. (2016). Optimal quantile approximation in streams. In *Proceedings of the 57th IEEE Symposium on Foundations of Computer Science (FOCS)* (pages 71 to 78). IEEE. [https://arxiv.org/abs/1603.05346](https://arxiv.org/abs/1603.05346)
+
+Lin, K., & Woo, C. (2025, January 10). *Unlock advanced query functionality with distribution metrics*. Datadog. [https://www.datadoghq.com/blog/distribution-metrics/](https://www.datadoghq.com/blog/distribution-metrics/)
 
 Masson, C., Rim, J. E., & Lee, H. K. (2019). DDSketch: A fast and fully-mergeable quantile sketch with relative-error guarantees. *Proceedings of the VLDB Endowment, 12*(12), pages 2195 to 2205. [https://www.vldb.org/pvldb/vol12/p2195-masson.pdf](https://www.vldb.org/pvldb/vol12/p2195-masson.pdf)
 

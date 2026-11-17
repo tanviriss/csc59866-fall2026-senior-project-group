@@ -13,7 +13,7 @@ Online services are judged by how slow their slowest requests are, not by the av
 
 There are two easy ways to build it, and both break. The first is to average each host's own p99. It is cheap, but percentiles do not add, so the result is wrong whenever hosts carry different amounts of traffic. Prometheus, a widely used monitoring tool, warns that precomputed percentiles from separate summaries generally cannot be combined, while histogram bucket counts can (Prometheus Authors). The second is to ship every single measurement to one place and sort it. That is exact, but bandwidth, storage and query time grow with traffic. NSF award 2544434 describes the same tension: telemetry about traffic, resource use and failures can be too large to analyze in full when operators need answers quickly (National Science Foundation).
 
-A small example shows the size of the error. Host A serves 1,000,000 requests in an hour with a local p99 of 50 ms. Host B is overloaded and serves 1,000 requests with a local p99 of 900 ms. Averaging gives 475 ms, which crosses a 300 ms alert and pages an engineer. Pooled, the true fleet p99 is about 50 ms, since Host B served only 0.1 percent of the traffic. The alert was false. If one busy host were slow and many quiet hosts fast, the average would instead hide a real slowdown. These numbers are invented to show the effect.
+A small example shows the size of the error. In an hour, Host A serves 1,000,000 requests: 985,000 at 20 ms and 15,000 at 50 ms, so its local p99 is 50 ms. Host B is overloaded and serves 1,000 requests: 980 at 100 ms and 20 at 900 ms, so its local p99 is 900 ms. Averaging gives 475 ms, which crosses a 300 ms alert and pages an engineer. Pooling all 1,001,000 requests and taking the nearest rank p99, position 990,990 in sorted order, gives an exact fleet p99 of 50 ms, since Host B served only 0.1 percent of the traffic. The page was false. If one busy host were slow and many quiet hosts fast, the average would instead hide a real slowdown. These numbers are synthetic, but every request is listed, so the exact answer can be recomputed.
 
 A middle path exists: each host sends a small summary, called a sketch, that can be merged with the others into a summary of all the data. Whether those merged summaries stay accurate under uneven traffic and tight memory is what this project investigates.
 
@@ -24,6 +24,8 @@ The NSF award, CAREER: Approximation First Telemetry for Hyperscale Networked Sy
 Agarwal et al. define what a mergeable summary must do: two summaries combine into a summary of the combined data while keeping the same error and size guarantees. Masson, Rim and Lee show that DDSketch meets this definition with a relative error guarantee, and that sketches with only a rank error guarantee can give large relative errors on skewed data, which is exactly the shape of latency data.
 
 For real data, Alibaba's public 2022 microservices trace records the response time of each call and the container that served it, so each container can play the role of a host (Alibaba Group). Winchester et al. report that workloads in an Alibaba production deployment follow long tailed distributions, which supports the uneven traffic condition, though I still have to check it for the containers I use.
+
+Real teams do use the averaging calculation. The GOV.UK platform team fixed a Grafana dashboard whose request duration panel averaged Prometheus summary quantiles across pods, and moved the metric to histograms (GOV.UK). Datadog's engineers write that many vendors compute percentiles per host and that combining those values across hosts misleads (Lin and Woo). Neither source says how large the error was or which alerts it changed, so the error sizes in this project remain a synthetic evaluation until I measure them.
 
 I have not observed the problem myself yet. My first measurement will be the gap between the averaged p99 and the exact p99 on one slice of the Alibaba trace. My working belief is that the error is driven more by how uneven traffic is than by how many hosts there are, but I have not tested that.
 
@@ -55,6 +57,7 @@ Adaptive design, reusing an existing solution for a different need (Driscoll et 
 | Does a merged DDSketch keep the fleet p99 within 1 percent as hosts grow from 4 to 256 and traffic becomes more uneven? | Simulate hosts with controlled skew, merge their sketches and compare with the exact p99 over 5 seeds |
 | At 512 bytes and 2 KiB per host, is it better to loosen DDSketch's accuracy or merge its lowest buckets? | A small trial on synthetic data before the main runs, checking whether p99 stays above the merged range |
 | Is traffic across Alibaba containers uneven enough, with at least 1,000 calls per container, for the averaging error to show? | Download one 3 minute file in week 1 and count calls per container for the busiest microservices |
+| How much error can the page decision tolerate, and what does the saving cost? | Fixed before testing: the engineer is paged above 300 ms, and a method is acceptable if its p99 is within 1 percent and its summaries use at most 1 percent of the bytes for every latency. Within 1 percent, the decision can flip only when the exact p99 is between about 297 and 303 ms, so I test streams scaled to an exact p99 of 240, 295, 300, 305 and 360 ms and count flips |
 | How much better is a sketch than a simple sample at the same memory? | Run uniform sampling at the same budgets and compare error at p99 and p99.9 |
 
 ## 6. One Early Risk
@@ -77,7 +80,11 @@ Driscoll, Mark, et al. *Engineering Capstone Design: Project Planning, Organizin
 
 Dunning, Ted, and Otmar Ertl. "Computing Extremely Accurate Quantiles Using t-Digests." *arXiv*, 2019, arxiv.org/abs/1902.04023.
 
+GOV.UK. "Update Request Rates, Errors, Durations Dashboard." Pull request 1302, *alphagov/govuk-helm-charts*, GitHub, github.com/alphagov/govuk-helm-charts/pull/1302. Accessed 17 Nov. 2026.
+
 Karnin, Zohar, Kevin Lang, and Edo Liberty. "Optimal Quantile Approximation in Streams." *Proceedings of the 57th IEEE Symposium on Foundations of Computer Science*, 2016, pages 71 to 78, arxiv.org/abs/1603.05346.
+
+Lin, Kathy, and Colten Woo. "Unlock Advanced Query Functionality with Distribution Metrics." *Datadog*, 10 Jan. 2025, www.datadoghq.com/blog/distribution-metrics/.
 
 Masson, Charles, Jee E. Rim, and Homin K. Lee. "DDSketch: A Fast and Fully-Mergeable Quantile Sketch with Relative-Error Guarantees." *Proceedings of the VLDB Endowment*, vol. 12, no. 12, 2019, www.vldb.org/pvldb/vol12/p2195-masson.pdf.
 
