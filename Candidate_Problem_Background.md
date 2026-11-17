@@ -1,6 +1,6 @@
-# V1: Candidate Problem Background
+# Candidate Problem Background
 
-> **V1, initial candidate problem.** This is my first Candidate Problem Background, written September 28, 2026, before I moved to A15 and then to my final topic. It is kept as written for the record and is no longer active. My final topic papers are [Final_Topic_Problem_Understanding_Paper.md](Final_Topic_Problem_Understanding_Paper.md) and [Final_Topic_Candidate_Problem_Background.md](Final_Topic_Candidate_Problem_Background.md).
+> **Initial candidate problem.** This is my first Candidate Problem Background, written September 28, 2026, before I moved to A15 and then to my final topic. It is kept as written for the record and is no longer active. My final topic papers are [Final_Topic_Problem_Understanding_Paper.md](Final_Topic_Problem_Understanding_Paper.md) and [Final_Topic_Candidate_Problem_Background.md](Final_Topic_Candidate_Problem_Background.md).
 
 [Zihad Patwary] · Senior Project I  
 **Candidate Problem Background**

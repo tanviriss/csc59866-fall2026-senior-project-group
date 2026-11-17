@@ -6,20 +6,25 @@ Approximation First Telemetry with Mergeable Quantile Summaries. A one student s
 
 The project is a slice of NSF award 2544434, Approximation First Telemetry for Hyperscale Networked Systems (University of Maryland, College Park), covering only the first two research thrusts: mergeable summaries with error tracking, and a simple query layer.
 
-## Project selection papers
+## Documents
 
-- [Problem Understanding Paper](Final_Topic_Problem_Understanding_Paper.md) (Final Topic)
-- [Candidate Problem Background](Final_Topic_Candidate_Problem_Background.md) (Final Topic)
-- [V1: Candidate Problem Background](V1_Candidate_Problem_Background.md) (initial candidate problem)
-- [V1: A15 Problem Understanding Paper](V1_A15_Problem_Understanding_Paper.md) (initial proposal)
+### Final Topic
 
-## Design document
+| Document | What it is |
+| --- | --- |
+| [Problem Understanding Paper](Final_Topic_Problem_Understanding_Paper.md) | The five questions, my individual scope, and how this topic improves on A15 |
+| [Candidate Problem Background](Final_Topic_Candidate_Problem_Background.md) | Problem, evidence, existing solutions, open questions, early risk, readings, and how this topic improves on my earlier topics |
+| [Proposal](ZihadPatwaryProposal.md) | The full project proposal |
+| [Design document](DESIGN.md) | The weekly design document for the course; its figures and editable sources are in [assets/](assets/) |
 
-The weekly design document for the course is [DESIGN.md](DESIGN.md). Its figures and editable sources are in [assets/](assets/).
+### Initial Topics
 
-## Proposal
+The topics I worked on before choosing the final topic, kept for the record.
 
-Read the full proposal: [ZihadPatwaryProposal.md](ZihadPatwaryProposal.md)
+| Document | Date | Topic |
+| --- | --- | --- |
+| [Candidate Problem Background](Candidate_Problem_Background.md) | Sep 28, 2026 | Recovering interrupted AI document analysis jobs while minimizing repeated work |
+| [A15 Problem Understanding Paper](A15_Problem_Understanding_Paper.md) | Oct 19, 2026 | Safe restarts in a dataset enrichment pipeline (USGS earthquake data, Python and Delta Lake) |
 
 ## At a glance
 
@@ -28,4 +33,3 @@ Read the full proposal: [ZihadPatwaryProposal.md](ZihadPatwaryProposal.md)
 - **Experiments:** show the failure, single node accuracy, a merge study across nodes, and a query layer test.
 - **Excluded:** learned compression, the configuration management engine, and any claim of true hyperscale. Scale is simulated.
 - **Deliverables:** a simulator, a minimal mergeable sketch of my own, error versus memory results, and a decision guide.
-
