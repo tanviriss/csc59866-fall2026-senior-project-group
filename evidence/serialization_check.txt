@@ -1,0 +1,4 @@
+bins   32 alpha 0.14293 serialized   277 B, nonzero bins   28, store type after decode DenseStore, p99 change 2.5e-15, merge into bin limited sketch: failed: AttributeError: 'DenseStore' object has no attribute 'bin_limit'
+bins  128 alpha 0.03596 serialized  1045 B, nonzero bins  102, store type after decode DenseStore, p99 change 4.9e-15, merge into bin limited sketch: failed: AttributeError: 'DenseStore' object has no attribute 'bin_limit'
+bins  512 alpha 0.01000 serialized  4118 B, nonzero bins  333, store type after decode DenseStore, p99 change 2.4e-14, merge into bin limited sketch: failed: AttributeError: 'DenseStore' object has no attribute 'bin_limit'
+bins 2048 alpha 0.01000 serialized  4118 B, nonzero bins  323, store type after decode DenseStore, p99 change 2.4e-14, merge into bin limited sketch: failed: AttributeError: 'DenseStore' object has no attribute 'bin_limit'

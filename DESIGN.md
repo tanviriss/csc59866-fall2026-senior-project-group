@@ -3,11 +3,11 @@
 **Author:** Zihad Patwary  
 **Course:** CSC 59866  
 **Selected project and option:** 04 CAREER: Approximation-First Telemetry for Hyperscale Networked Systems  
-**Current assignment:** 2
+**Current assignment:** 3
 
 ## Progress note
 
-This version adds the Section 2 specification and a first Section 3 comparison, and revises Section 1. Writing requirements made me fix what I had left vague: the definition of p99, the number of simulated hosts (4 to 256) and the memory per host (512 bytes to 32 KiB). Tanvir's review asked for those numbers and for real data, so Section 1 now uses Alibaba's public 2022 microservices trace, which records each call's response time and serving container. Its description showed that server side times are stored as negative numbers, so the loader must filter them. The main open issue is that at the two smallest budgets DDSketch cannot keep 1 percent accuracy from 1 ms to 10 s, so I must choose coarser accuracy or dropping low values. Next I will select the design and draw the architecture.
+This version selects the design in Section 3 with two decision records, adds the context and architecture views in Section 4, the component table and the contract for the fleet quantile operation in Section 5, and starts Section 9 with the smallest implementation path and one feasibility experiment. The experiment answered the open question from Assignment 2. At 512 bytes and 2 KiB per host, keeping α = 0.01 and collapsing the lowest bins gave p99 errors from 0.6 percent up to 15,155 percent, because the few bins left cover only the very top of the tail. Choosing a coarser α sized to the budget kept every answer inside its own bound: at most 1.0 percent (lognormal) and 14.3 percent (Pareto) at 512 bytes, and at most 3.6 percent at 2 KiB. Decision 1 adopts the coarser α. A side check showed that the library's serialized format loses the bin limit and cannot be merged back, which is one reason Decision 2 keeps hosts as objects in one process. The experiment also showed the package allocates bins in chunks of 128, so Section 2 now counts bytes over the occupied bin range. Still open: the Alibaba file is not downloaded yet (A2), and the build times measured here suggest the full grid may exceed the 30 minute target in Q3. Next I will build the smallest path in Section 9 and design the data structures in Assignment 4.
 
 ## Contents
 
@@ -93,7 +93,7 @@ The system is a simulator. Its user is me, or anyone repeating the study, acting
 - **Exact p99:** sort all N latencies from all hosts and take the value at position ⌈0.99 × N⌉, counting from 1. This is the nearest rank definition, and every estimate is judged against it. Other quantiles q work the same way with ⌈q × N⌉.
 - **Relative error:** |estimate − exact| / exact, reported as a percentage.
 - **Summary:** what a host reports instead of its raw latencies. The four kinds are its local p99 (for averaging), a uniform random sample with the host's request count, a DDSketch, and the full list of latencies (for the exact reference only).
-- **Memory budget:** the bytes one host may use for its summary, counted as 8 bytes per stored latency value and 16 bytes per DDSketch bin, which holds a bin index and a count. Python object overhead is not counted, and results will say so.
+- **Memory budget:** the bytes one host may use for its summary, counted as 8 bytes per stored latency value and 16 bytes per DDSketch bin, which holds a bin index and a count. DDSketch bins are counted over the occupied range, from the lowest to the highest bin that holds a count, not over the array the package allocates, which grows in chunks of 128 (feasibility experiment F1, Section 9). Python object overhead is not counted, and results will say so.
 - **Traffic skew:** how requests are split across H hosts. Under a skew of s, host i (for i from 1 to H) receives a share of requests proportional to 1 / i^s. A skew of 0 is an even split, and a skew of 2 gives the busiest of 64 hosts about 61 percent of requests.
 - **Requirement IDs:** F means a functional requirement, C a correctness rule and Q a quality target, following the course guide. A numbers are assumptions and T numbers are planned tests.
 - **Page decision:** whether the fleet p99 is above 300 ms, the proposed alert threshold from Section 1. A decision flip is a case where an estimate and the exact p99 fall on different sides of 300 ms.
@@ -200,7 +200,7 @@ The synthetic grid is 4 host counts × 4 budgets × 4 skew cases × 2 distributi
 | A1 | Hosts simulated inside one program are enough for this question, because the question is about what a summary can represent, not about network delay | Code review that each host builder receives only its own partition (F2). Network timing is excluded in Section 1 |
 | A2 | One 3 minute Alibaba file has enough calls per container for a p99 to mean something, which I set at 1,000 or more calls per host | Download one file in week 1 and count calls per container for the busiest microservices before relying on it |
 | A3 | Whole millisecond times are precise enough at p99. The trace stores times under 1 ms as 0 | Measure the share of zeros and repeated values in the slice. If an exact quantile is below 1 ms, report absolute error for it instead of relative error |
-| A4 | The open source DDSketch package behaves as its paper describes, including merging and limiting the number of bins | Run tests T6 and T9 before any experiment |
+| A4 | The open source DDSketch package behaves as its paper describes, including merging and limiting the number of bins | Partly checked in F1 (Section 9): the bin cap held and merge order did not matter. Run tests T6 and T9 before the full grid |
 | A5 | Lognormal and Pareto latencies are a fair stand in for real latencies | Compare their tails with the Alibaba slice and report any large difference |
 
 ### Constraints
@@ -242,23 +242,171 @@ Each cell says whether the approach can meet the requirement and what the claim 
 
 A second, smaller choice is how to simulate hosts. Hosts can be objects inside one program, or separate operating system processes that send serialized summaries to a coordinator. Separate processes would measure the real size of a sent summary and make host isolation (F2) automatic, at the cost of setup and slower runs at 256 hosts. Objects in one program are simpler and meet every requirement above if summary sizes are counted as defined in Section 2.
 
-**Choice and reason:** The final choice, with two decision records, comes in Assignment 3. My current direction is that merged DDSketch is the main candidate because it is the only row expected to meet Q1, with averaging and uniform sampling kept as baselines, since showing how they fail is part of the result. Whether to add the fixed bucket histogram, and whether hosts are objects or processes, are the two open decisions. The averaging row already fails C2 and the ordinary example, which is the kind of distinction the RoomReserve restart requirement makes between its options.
+### Selected solution
 
-### Decision 1
+**Choice:** each simulated host builds one DDSketch from its own requests, using the package's sketch that caps the number of bins and collapses the lowest ones when the cap is reached. The bin cap is the host's budget divided by 16 bytes, and α is the finest accuracy whose bins still cover 1 ms to 10 s within that cap (Decision 1). A coordinator checks and merges the host sketches and answers the fleet quantile with the hosts and requests it covers. Averaging local p99 values and a uniform sample with counts run beside it as baselines, and exact pooling is the reference every answer is scored against. Hosts are objects inside one Python process (Decision 2).
 
-To be completed in Assignment 3: how to fit DDSketch into the two smallest budgets, by merging its lowest bins or by using a coarser α.
+**Reasons:**
 
-### Decision 2
+1. **It is the only option expected to meet Q1 and Q5.** At 8 KiB the sketch has 512 bins, more than the 461 that α = 0.01 needs, so its error bound is in force. Experiment F1 measured at most 0.99 percent p99 error at 8 KiB across 10 runs (Section 9).
+2. **It meets C1 and C2 by construction.** Merging adds bin counts, so order and grouping do not matter and counts are never lost. F1 found identical bins for five merge orders at every budget.
+3. **The baselines stay because their failure is part of the result.** The decision guide planned for Semester II has to show where averaging and sampling break, not only that DDSketch works. Averaging already fails C2 and the ordinary example.
+4. **The fixed bucket histogram is left out of the six week build.** A DDSketch is itself a histogram with fixed bucket edges, spaced by α instead of chosen by hand. Adding a Prometheus style histogram would mostly test my choice of edges, which does not answer the central question. It returns as a Semester II candidate if time allows.
 
-To be completed in Assignment 3: whether simulated hosts are objects in one program or separate processes.
+**What this costs:** at 512 bytes and 2 KiB the error bound is 14.3 and 3.6 percent instead of 1 percent, so those budgets show the memory curve but cannot meet Q1. Every host in a run must use the same α, which becomes a checked rule in the Section 5 contract.
+
+### Decision 1: fitting DDSketch into the two smallest budgets
+
+| Part | Record |
+|---|---|
+| Context | At 16 bytes per bin, 512 bytes allow 32 bins and 2 KiB allow 128. Covering 1 ms to 10 s at α = 0.01 needs about 461 bins (Section 3 table), so the sketch must give up something at those budgets |
+| Options | **A.** Keep α = 0.01 and let the package collapse the lowest bins when the cap is reached. **B.** Choose a coarser α so 1 ms to 10 s fits the cap: α = 0.143 for 32 bins and α = 0.036 for 128 bins, keeping the same cap as a safety limit. **C.** Drop the two smallest budgets from the grid |
+| Choice | **B**, coarser α sized to the budget. At 8 KiB and 32 KiB, B and A are the same setting, α = 0.01 |
+| Reasons | In F1 (Section 9), option A gave p99 errors of 432 to 1,316 percent (lognormal) and 2,248 to 15,155 percent (Pareto) at 512 bytes, and up to 2,136 percent at 2 KiB. Collapsing keeps only the 32 highest bins, which at α = 0.01 span a factor of about 1.9 below the single largest latency, so p99 falls into the collapsed bin and the answer depends on one outlier. Option B stayed inside its own bound in all 20 small budget runs: at most 1.0 and 14.3 percent at 512 bytes, at most 3.6 percent at 2 KiB. Option C would remove the left end of the error against memory curve, which is half of what the grid is meant to show |
+| Consequences | α is no longer one fixed value: each run sets it from the budget, and all hosts and the coordinator must share it, because sketches with different α cannot be merged. The C4 bound check uses the run's α. At 512 bytes and 2 KiB, Q1 and Q5 are not expected to pass, and results will report those budgets as below the accuracy target, not as defects. Latencies below the largest value divided by 10,000 can still collapse into the lowest bin, which matters for p50 only if p50 is that small |
+| Reconsider if | Real Alibaba latencies span much more than 10,000 to 1 between the largest value and p50; a rank based sketch such as KLL in Semester II beats B at 512 bytes; or the merged p999 needs a finer α than the budget allows |
+
+### Decision 2: simulated hosts as objects in one process
+
+| Part | Record |
+|---|---|
+| Context | F2 requires each host to see only its own requests and stay within its budget, Q3 requires the grid to finish in 30 minutes, and the grid goes up to 256 hosts on one laptop |
+| Options | **A.** Hosts are objects in one Python process, and the coordinator receives sketch objects inside an envelope. **B.** Hosts are separate operating system processes that send serialized sketches to the coordinator. **C.** One process, but every sketch passes through serialized bytes, so the coordinator only ever sees bytes |
+| Choice | **A**, objects in one process. Isolation comes from the partitioner handing each host builder only its own array, and the budget comes from the bin cap and the byte count defined in Section 2 |
+| Reasons | A side check (Section 9) found that the package's serialized format decodes into a sketch without its bin cap, and merging that into a capped sketch fails with an error at all four budgets. B and C would need my own encoder before any experiment can run. A is the shortest path to the walking skeleton in Section 9, and C1 to C4 are about what a summary can represent, which A tests fully (assumption A1) |
+| Consequences | Isolation is enforced by code structure and a review, not by the operating system, so T2 must check that a host builder never receives another host's rows. Summary size is computed, not measured on a wire. There is no parallelism, which puts Q3 at risk: F1 suggests about 0.4 seconds per million latencies to build sketches, so the 10 million latency grid could need over 40 minutes |
+| Reconsider if | The first full grid run misses Q3, in which case B with a small encoder of my own is the fallback; or Semester II adds network delay or late reports, which need real messages |
 
 ## 4 Architectural design
 
-*Not due yet. To be completed in Assignment 3.*
+The system is one Python program that plays every part of the fleet: the data, the hosts, the monitoring coordinator and the judge. Two views describe it. The context view shows what lies outside the program, and the architecture view shows the parts inside one run.
+
+### 4.1 Context view
+
+![Context diagram. In the center is the fleet p99 simulator, one Python 3 program on my laptop. On the left the researcher sends grid settings and receives results, a run log and figures. Above it the Alibaba 2022 trace provides one 3 minute call graph file, downloaded once by hand and kept on local disk. At the lower left, the open source packages ddsketch and numpy are imported at run time. On the right the simulator pushes code, DESIGN.md and results to the zihad-patwary branch of the Git repository, which holds no raw trace data. The reviewer pulls from the repository and reruns the grid. A note says nothing runs on a real network.](assets/context_view.png)
+
+**Figure 3.** Context view. The simulator has no live connection to anything outside the laptop: the trace is read from a local file, and results leave only through Git. The researcher stands in for the on call engineer and platform team from Section 1.
+
+### 4.2 Architecture view
+
+![Architecture diagram inside a dashed boundary labeled one Python 3 process on my laptop. A grid.json file is read once by part 1, the run controller. The controller calls part 2, the data source, with load dataset and seed, and sends the setting and fault plan (H, budget, alpha, expected host IDs, for example drop host 3 or send host B twice) to part 5, the coordinator. A local CallGraph slice file, not committed, is read in chunks of one million rows by the data source. The data source passes latencies in milliseconds to part 3, the partitioner. The partitioner passes each partition and its count to part 4, the host builders, drawn as a stack of H boxes in the simulated color, each using the reused ddsketch package. It also passes all latencies to part 6, the exact reference. Host builders send a SummaryEnvelope to the coordinator. The coordinator sends a FleetAnswer or error to part 7, the scorer, which also receives the exact quantile from the exact reference and writes one row to evidence/results.csv on disk. A legend marks parts I build, reused parts, simulated parts and saved state.](assets/architecture_view.png)
+
+**Figure 4.** Architecture view of one run. Arrows inside the boundary are Python function calls that pass the record named on the arrow. Saved state is drawn as cylinders and lives only on local disk.
+
+| Part | Responsibility | Talks to, and how | Saved state | Runs where |
+|---|---|---|---|---|
+| 1 Run controller | Reads the grid, runs each setting and seed in order, tells the coordinator which hosts to expect and which reports to drop or repeat for failure cases | Reads grid.json once. Calls 2, and sends each setting to 5 | Reads grid.json. Writes run_log.txt with package versions, seeds and start and end times | The one Python process |
+| 2 Data source | Produces a float array of latencies in ms: synthetic (lognormal or Pareto, seeded) or loaded from the Alibaba slice, keeping rows with rt > 0 and counting dropped rows by reason (F5) | Called by 1. Reads the CallGraph file in chunks. Returns latencies (and container IDs for Alibaba) to 3 | Reads the local CallGraph file. Holds nothing between runs | Same process |
+| 3 Partitioner | Gives every latency exactly one host ID, by traffic skew or by container, and counts requests per host (F1) | Gives host h only partition h and its count. Gives 6 the full array | None | Same process |
+| 4 Host builder, one per host | Builds one summary from its own partition within the byte budget, wraps it in a SummaryEnvelope (F2). Uses the ddsketch package for the DDSketch method | Receives one partition. Sends one envelope to 5 | None. Its sketch lives only until the coordinator has merged it | Same process. A simulated host, not a machine |
+| 5 Coordinator | Checks each envelope against the expected hosts, repeated IDs, α and counts, merges accepted sketches, and answers a quantile with its coverage (F3, C1 to C4) | Receives the setting from 1 and envelopes from 4. Returns a FleetAnswer or error to 7 | In memory for one run: received host IDs, merged sketch, merged count. Discarded after scoring | Same process. Stands in for the monitoring backend |
+| 6 Exact reference | Pools all latencies and returns the nearest rank quantile (F4) | Receives the full array from 3. Returns the exact value to 7 | None | Same process |
+| 7 Scorer | Computes relative error, the 300 ms page decision and flip (Q5), checks the α bound (C4), and writes one result row per setting, method, quantile and seed (F4) | Receives from 5 and 6. Appends to results.csv | Writes evidence/results.csv | Same process |
+
+### 4.3 What I build, reuse or simulate
+
+| Kind | Items | Why |
+|---|---|---|
+| Build | Run controller, data source and Alibaba loader, partitioner, host builder wrapper, coordinator checks, exact reference, scorer, averaging and sampling baselines | These parts carry the requirements: coverage, duplicate rejection, scoring and the page decision exist in no package |
+| Reuse | `ddsketch` 3.0.1 for the sketch and its merge, `numpy` for data generation and sorting, the Alibaba 2022 trace for real latencies | Writing my own DDSketch would add a source of bugs without answering the question. A4 is checked by T6 and T9, and F1 already exercised merge and the bin cap |
+| Simulate | Hosts are objects, the network is a function call, a host failure is the controller withholding an envelope, a repeated report is the controller sending it twice | The question is what a summary can represent (A1). Real machines and network timing are out of scope (Section 1) |
+
+### 4.4 Tracing one request: the ordinary example
+
+This trace follows the fleet p99 query for the Section 2 ordinary example, at 8 KiB per host, through Figure 4.
+
+1. **Run controller** reads the setting H = 2, budget 8 KiB, method DDSketch, q = 0.99. It derives a bin cap of 8,192 / 16 = 512 and α = 0.01, and tells the coordinator to expect hosts 0 and 1.
+2. **Data source** returns 1,001,000 latencies: 985,000 at 20 ms, 15,000 at 50 ms, 980 at 100 ms and 20 at 900 ms.
+3. **Partitioner** gives host 0 (Host A) its 1,000,000 latencies and host 1 (Host B) its 1,000, and passes all 1,001,000 to the exact reference.
+4. **Host builders** each build a DDSketch with α = 0.01 and cap 512 and send an envelope: host 0 with count 1,000,000, host 1 with count 1,000.
+5. **Coordinator** accepts both envelopes (expected, not repeated, same α, counts match), merges them, and answers 49.90 ms covering 2 of 2 hosts and 1,001,000 requests. The merged sketch occupies 192 bins, 3,072 bytes.
+6. **Exact reference** returns 50 ms, position 990,990 of the sorted list.
+7. **Scorer** records a relative error of 0.19 percent, inside the 1 percent bound, and no page, matching the exact decision. Averaging, scored in the same row set, reports 475 ms and pages.
+
+Steps 4 to 6 were run with the package to get these numbers. The other steps describe code still to be written.
+
+**A design choice in this path:** the coordinator rejects a repeated host ID instead of trusting the counts to reveal a duplicate. Sending Host B twice leaves the p99 at 49.90 ms in this example, because Host B is so small, so an accuracy check would not notice. Only the merged count changes, from 1,001,000 to 1,002,000. Checking IDs catches the duplicate at the point where it enters, whether or not it moves the answer, which is what C2 requires.
 
 ## 5 Component design and interfaces
 
-*Not due yet. To be completed in Assignment 3.*
+### 5.1 Component responsibilities
+
+| Component | Responsible for | Not responsible for | Main input | Main output | Requirements |
+|---|---|---|---|---|---|
+| Run controller | Order of runs, seeds, fault plan, run log | Any statistics | grid.json | Setting records, run_log.txt | F4, Q3 |
+| Data source | Producing clean latencies in ms and counting dropped rows | Deciding hosts | Dataset name, seed, file path | Latency array, drop counts | F5, A3 |
+| Partitioner | One host per latency, request count per host | Summaries | Latency array, H, skew | H partitions with counts | F1 |
+| Host builder | One summary per host within budget, filling the envelope honestly | Merging, knowing other hosts | One partition, method, α, bin cap | SummaryEnvelope | F2 |
+| Coordinator | Accepting or rejecting envelopes, merging, answering with coverage | Knowing the exact answer | Setting, envelopes, q | FleetAnswer or error | F3, C1, C2, C3, C4 |
+| Exact reference | Nearest rank quantile of all data | Summaries | All latencies, q | Exact value | F4 |
+| Scorer | Error, page decision, bound check, result rows | Changing any answer | FleetAnswer, exact value | Rows in results.csv | F4, C4, Q1, Q5 |
+
+### 5.2 Interface contract: answer a fleet quantile
+
+This is the critical operation: it produces the only number the on call engineer would see. It implements **F3** (one fleet answer with coverage), **C2** (no request lost or counted twice), **C3** (a partial answer is never complete) and **C4** (a promised bound holds).
+
+**Operation:** `Coordinator.answer(setting, envelopes, q) → FleetAnswer or error`
+
+**Input records:**
+
+| Field | Type and rule | Example (Host A) |
+|---|---|---|
+| `setting.expected_hosts` | Set of host IDs the run expects. Integers 0 to H − 1 for synthetic data | {0, 1} |
+| `setting.alpha` | Float in (0, 1), shared by every host in the run (Decision 1) | 0.01 |
+| `setting.bin_cap` | Integer, budget in bytes divided by 16 | 512 |
+| `envelope.host_id` | One ID from `expected_hosts` | 0 |
+| `envelope.request_count` | Integer ≥ 0, the number of requests the host summarized | 1,000,000 |
+| `envelope.method` | "ddsketch", "sample" or "local_p99" | "ddsketch" |
+| `envelope.alpha`, `envelope.bin_cap` | Must equal the setting | 0.01, 512 |
+| `envelope.bytes_used` | Occupied bins × 16, at most the budget | 752 (47 bins) |
+| `envelope.sketch` | The host's sketch object | DDSketch with 1,000,000 values |
+| `q` | Float, 0 < q < 1 | 0.99 |
+
+**Output record, FleetAnswer:**
+
+| Field | Meaning | Example |
+|---|---|---|
+| `estimate_ms` | Merged estimate of quantile q | 49.90 |
+| `hosts_covered`, `hosts_expected` | Accepted envelopes and expected hosts | 2, 2 |
+| `requests_covered` | Sum of accepted request counts | 1,001,000 |
+| `missing_hosts` | Expected IDs with no accepted envelope | [] |
+| `complete` | True only when `missing_hosts` is empty | true |
+| `alpha` | The bound the estimate carries | 0.01 |
+| `rejected` | List of (host_id, reason) for envelopes refused | [] |
+
+**State changes:** for one run the coordinator holds the set of accepted host IDs, one merged sketch created with the run's α and bin cap, and the merged count. Each envelope is checked on its own. An accepted envelope adds its host ID, merges its sketch and adds its count. A rejected envelope changes nothing and is listed in `rejected`. `answer` reads the state and does not change it, so asking for p50 and p99 from the same merge gives consistent coverage. The state is discarded after the scorer writes its rows.
+
+**Checks, in order, and errors:**
+
+| Order | Condition | Result | Requirement |
+|---|---|---|---|
+| 1 | q ≤ 0 or q ≥ 1 | Error `QUANTILE_OUT_OF_RANGE`, no number | Section 2 unsuccessful cases |
+| 2 | Host ID not in `expected_hosts` | Envelope rejected, `UNKNOWN_HOST` | C2 |
+| 3 | Host ID already accepted | Envelope rejected, `DUPLICATE_HOST` | C2 |
+| 4 | α or bin cap differ from the setting | Envelope rejected, `PARAMETER_MISMATCH`. The package itself would raise an error on this merge | Decision 1 |
+| 5 | `request_count` differs from the sketch's own count | Envelope rejected, `COUNT_MISMATCH` | C2 |
+| 6 | `bytes_used` above the budget | Envelope rejected, `BUDGET_EXCEEDED` | F2 |
+| 7 | No envelope accepted | Error `NO_SUMMARIES`, no number | C3 |
+| 8 | Some expected hosts missing | Answer returned with `complete` false and `missing_hosts` listed | C3 |
+
+**Concrete examples.** Examples 1, 2 and 4 were run with ddsketch 3.0.1. The others follow from the rules above.
+
+| # | Input | Expected result | State after |
+|---|---|---|---|
+| 1 | Ordinary example: Host A (ID 0, 1,000,000) and Host B (ID 1, 1,000), α = 0.01, cap 512, q = 0.99 | 49.90 ms, 2 of 2 hosts, 1,001,000 requests, complete. Exact is 50 ms, error 0.19 percent | Accepted {0, 1}, count 1,001,000 |
+| 2 | Example 1, then Host B's envelope again | Second copy rejected `DUPLICATE_HOST`. Answer unchanged at 49.90 ms and 1,001,000. Without the check the count would read 1,002,000 | Unchanged |
+| 3 | 16 expected hosts, host 3 withheld by the fault plan, 10,000,000 requests split evenly | Answer with 15 of 16 hosts, 9,375,000 requests, `complete` false, `missing_hosts` [3] | Accepted 15 IDs |
+| 4 | An envelope with α = 0.036 sent to a run with α = 0.01 | Rejected `PARAMETER_MISMATCH`. Merging it directly raised "Cannot merge two DDSketches with different parameters" | Unchanged |
+| 5 | Example 1 with q = 1.5 | Error `QUANTILE_OUT_OF_RANGE`, no number | Unchanged |
+| 6 | No envelopes | Error `NO_SUMMARIES`, no number | Empty |
+
+**Still being worked out:**
+
+- **Rank definition.** The package answers at rank q × (N − 1), while the exact reference uses nearest rank ⌈q × N⌉. They can differ by one position, which C4 already allows for. Whether the scorer should also report error against the package's rank is undecided.
+- **Host IDs for Alibaba data.** Containers have string IDs, so `host_id` may need to be a string, mapped to integers by the partitioner.
+- **Envelopes for the baselines.** The local p99 baseline sends no count by definition, so it cannot pass check 5. It will bypass the coordinator and be scored directly, labeled as failing C2, but the exact path is not designed yet.
+- **Byte count.** `bytes_used` uses the occupied bin range (Section 2). Whether the coordinator recomputes it instead of trusting the host is open. Recomputing is safer and cheap.
+- **Late reports.** All envelopes arrive before `answer` is called. A report arriving after the answer is out of scope until Section 8.
 
 ## 6 Data structure design
 
@@ -274,7 +422,63 @@ To be completed in Assignment 3: whether simulated hosts are objects in one prog
 
 ## 9 Implementation and feasibility
 
-*Not due yet. Started in Assignment 3 and refined through Assignment 6.*
+### 9.1 Smallest implementation path
+
+The first goal is a walking skeleton: the ordinary example passing end to end through every part in Figure 4, with one method and two hosts, before anything is scaled up. Each step ends with a check that must pass before the next starts.
+
+| Step | Build | Done when | Tests |
+|---|---|---|---|
+| 1 | Synthetic data source, partitioner, exact reference | 1,000,000 latencies over 16 hosts sum correctly and the ordinary example's exact p99 is 50 ms | T1 |
+| 2 | Host builder for DDSketch with the Decision 1 settings, and the envelope | Every sketch stays within its bin cap at all four budgets | T2 |
+| 3 | Coordinator with the eight checks in Section 5.2 | Contract examples 1 to 6 give the stated results | T3, T6, T7, T8, T9 |
+| 4 | Scorer and one result row | The ordinary example writes one row: 49.90 ms, 0.19 percent, no page | T4 |
+| 5 | Averaging and uniform sample baselines | The ordinary example gives 475 ms for averaging | T3 |
+| 6 | Run controller over the full grid, with timing | Grid finishes, or Q3 is reported as missed with the measured time | T12 |
+| 7 | Alibaba loader, after the A2 count check | Kept plus dropped rows equal rows read | T5 |
+
+Steps 1 to 4 are the skeleton. The Alibaba loader comes last because it depends on a download and on A2, and the skeleton does not need it.
+
+### 9.2 Feasibility experiment F1: DDSketch at the two smallest budgets
+
+**Question.** At 512 bytes (32 bins) and 2 KiB (128 bins) per host, which way of fitting DDSketch keeps the merged fleet p99 closer to the exact value: keeping α = 0.01 and collapsing the lowest bins (option A), or using a coarser α sized to the budget (option B)? Does merging stay independent of order when bins are collapsed?
+
+**Why this uncertainty.** It was the open question from Assignment 2 and it decides the setting used in half of the memory grid. If neither option worked, the grid, Q2 and the Section 3 choice would all have to change. It was also the cheapest way to test assumption A4, that the package's bin cap and merge behave as described.
+
+**Procedure.** Script [experiments/feasibility_budget.py](experiments/feasibility_budget.py), run with Python 3.13, numpy 2.5.3 and ddsketch 3.0.1 on a Linux test machine.
+
+1. Generate 1,000,000 synthetic latencies, lognormal (median 20 ms, σ = 1) and Pareto (shape 2.5, minimum 5 ms), seeds 1 to 5.
+2. Split them over 64 hosts with skew 1. In seed 1 the busiest host has 21.2 percent of requests and the quietest has 3,276.
+3. For each budget, build one sketch per host with option A, and with option B where it differs (α = 0.143 at 32 bins, α = 0.036 at 128 bins). As a reference, also build an uncapped sketch with α = 0.01.
+4. Merge the 64 sketches in host order, take p99, and compare with the exact nearest rank p99.
+5. For option A and seed 1, merge the same sketches in three shuffled orders and as a pairwise tree, and compare the bins exactly.
+
+**Evidence.** Full rows are in [evidence/feasibility_budget.csv](evidence/feasibility_budget.csv) and [evidence/feasibility_merge_order.csv](evidence/feasibility_merge_order.csv). The exact p99 was 204.1 to 205.3 ms for lognormal and 31.3 to 31.6 ms for Pareto. The table gives the smallest and largest p99 relative error over the 5 seeds.
+
+| Budget per host | Option | α | Lognormal error | Pareto error |
+|---|---|---|---|---|
+| 512 bytes, 32 bins | A, collapse lowest | 0.01 | 432 to 1,316 % | 2,248 to 15,155 % |
+| 512 bytes, 32 bins | B, coarser α | 0.143 | 0.42 to 1.01 % | 13.3 to 14.3 % |
+| 2 KiB, 128 bins | A, collapse lowest | 0.01 | 0.56 to 107.5 % | 244 to 2,136 % |
+| 2 KiB, 128 bins | B, coarser α | 0.036 | 3.00 to 3.58 % | 2.52 to 3.59 % |
+| 8 KiB, 512 bins | A = B | 0.01 | 0.56 to 0.99 % | 0.01 to 0.74 % |
+| 32 KiB, 2,048 bins | A = B | 0.01 | 0.56 to 0.99 % | 0.01 to 0.74 % |
+| No cap (reference) | Uncapped | 0.01 | 0.56 to 0.99 % | 0.01 to 0.74 % |
+
+Merge order: all five orders gave identical bins at every budget for both distributions. Bin cap: no capped sketch, on a host or merged, held more bins than its cap. The uncapped reference allocated up to 640 bins on merge, more than the 8 KiB budget, even though far fewer were occupied.
+
+**Finding.** Option A fails at small budgets. With only 32 or 128 bins at α = 0.01, the kept bins cover a narrow band just below the largest latency, so p99 lands in the collapsed lowest bin and the answer tracks the maximum, not the 99th percentile. Option B stays inside its own bound in every run. Its Pareto error sits near 14 percent because that bound is loose, and the lognormal error at 512 bytes is small probably because the exact p99 happened to fall near a bin center (203.2 ms), not because the bound is tighter there. Merging with the cap stayed independent of order, which supports C1 and A4. The allocation result means bytes must be counted over occupied bins, not allocated ones.
+
+**Resulting decisions.** Decision 1 chooses option B. Section 2 now counts DDSketch bytes over the occupied bin range. At 8 KiB and above nothing changes, so Q1 stays as written.
+
+**Limits.** Synthetic data only, 1,000,000 latencies rather than the grid's 10,000,000, one host count and skew, p99 only, and merge order checked for option A only. It was run on a test machine, not yet on my laptop, so it says nothing about Q3 on the laptop.
+
+### 9.3 Side check S1: serialized sketches
+
+Script [experiments/serialization_check.py](experiments/serialization_check.py) asked whether a host could send its sketch as bytes in the package's own protobuf format. Output is in [evidence/serialization_check.txt](evidence/serialization_check.txt). Serialized sizes were 277 to 4,118 bytes, about 10 to 13 bytes per occupied bin, and quantiles survived the round trip to within 3 × 10⁻¹⁴. But the decoded sketch has no bin cap, and merging it into a capped sketch failed with an error at all four budgets. This is one of the reasons for Decision 2.
+
+### 9.4 Run time observed so far
+
+Building 64 host sketches from 1,000,000 latencies took about 0.4 seconds per option in F1, so the full 10,000,000 latency grid of 640 runs may take over 40 minutes for DDSketch alone, against the 30 minute target in Q3. This is a projection, not a measurement of the grid. Step 6 of the smallest path will measure it, and the open questions in Section 12 list the responses.
 
 ## 10 Testing and verification
 
@@ -292,13 +496,15 @@ To be completed in Assignment 3: whether simulated hosts are objects in one prog
 | November 14, 2026 | Assignment 2: wrote the Section 2 specification and a first Section 3 comparison. Revised Section 1 to fix the host counts (4 to 256) and memory budgets (512 bytes to 32 KiB) and to name the Alibaba 2022 microservices trace as real data | Tanvir Islam's review asked how many servers I simulate, how much memory I test and for real world data. The Alibaba trace description confirmed a per call response time and serving container. Writing C4 showed that DDSketch at α = 0.01 needs about 461 bins, more than the two smallest budgets allow |
 | November 16, 2026 | Added Q4, a proposed target for answer speed, and a matching row in the Section 3 comparison. Rewrote every Design and test reference cell to name the responsible component and its planned test in one or two short sentences. Added the subsection "Why each requirement matters", with the reason and an example for every requirement, and moved the reasons for the 1 percent and 1 second targets into it. Corrected the averaging cell for C1 in Section 3, since averaging in groups changes the result | Added after the Assignment 2 presentation so the specification also covers how fast a fleet answer must be ready, not only how accurate and how small it is |
 | November 17, 2026 | Applied the Assignment 1 feedback. Section 1 now lists the full synthetic distribution behind the scenario, so the exact fleet p99 of 50 ms can be recomputed, and cites the GOV.UK dashboard fix and Datadog's statement as documented practice. Added Q5, a page decision tolerance fixed before testing, with five threshold cases from 240 to 360 ms, a matching row in Section 3, and the label changes in Figures 1 and 2 | The feedback on the November 6 version asked for a reproducible worked example, a documented case of the averaging practice or a narrower claim, and an acceptable error tied to the on call decision |
+| November 20, 2026 | Assignment 3: selected merged DDSketch with averaging and uniform sampling as baselines, and left the fixed bucket histogram for Semester II. Wrote Decision 1 (coarser α sized to the budget) and Decision 2 (hosts as objects in one process). Added Section 4 with context and architecture views (Figures 3 and 4) and a request trace, Section 5 with the component table and the fleet quantile contract, and Section 9 with the smallest implementation path, experiment F1 and side check S1. Changed the Section 2 memory budget to count DDSketch bins over the occupied range | F1 showed collapsing the lowest bins at α = 0.01 gives p99 errors up to 15,155 percent at 512 bytes, while a coarser α stayed inside its bound. S1 showed the package's serialized sketch cannot be merged back into a capped sketch. F1 also showed allocated bins can exceed the budget while occupied bins do not |
 
 | Open question | Why it matters | Next action |
 |---|---|---|
 | Does one 3 minute Alibaba file give at least 1,000 calls per container, and is traffic across those containers uneven? | Too few calls make p99 meaningless, and an even split would hide the averaging error | Download one file in week 1 and count calls per container (A2). If traffic is even, split the real latencies with the synthetic skews and label those runs |
-| At 512 bytes and 2 KiB per host, should DDSketch merge its lowest bins or use a coarser α? | Merging low bins keeps p99 accurate only if p99 stays above the merged range, while a coarser α loosens the bound everywhere | Decide in Assignment 3 (Decision 1), using a small trial on synthetic data |
+| Will the full grid finish within the 30 minutes in Q3? | F1 projects over 40 minutes for DDSketch builds at 10,000,000 latencies (Section 9.4) | Measure in step 6. If it misses, in order: reuse one generated dataset across host counts and budgets, run hosts in parallel processes (Decision 2 fallback), or revise Q3 with the measured time |
+| Should the scorer also report error against the package's own rank, q × (N − 1)? | The two rank definitions can differ by one position, which could blur small errors | Decide in Assignment 4 when the data structures and scorer are designed |
 
-**Assistance and reuse:** The document structure comes from the course design document template, and the requirement types and table layouts in Sections 2 and 3 follow Chapters 5 and 6 of the course guide. Figures 1 and 2 were drawn for this document, and their editable sources are listed below. Outside sources are cited where they are used and listed in References.
+**Assistance and reuse:** The document structure comes from the course design document template, and the requirement types and table layouts in Sections 2 and 3 follow Chapters 5 and 6 of the course guide. Figures 1 to 4 were drawn for this document, and their editable sources are listed below. Section 3 decision records, the Section 4 views and the Section 9 feasibility record follow Chapters 6, 7 and 11 of the course guide. Outside sources are cited where they are used and listed in References.
 
 ### References
 
@@ -314,6 +520,8 @@ To be completed in Assignment 3: whether simulated hosts are objects in one prog
 | GOV.UK, [Update request rates, errors, durations dashboard, pull request 1302](https://github.com/alphagov/govuk-helm-charts/pull/1302), alphagov/govuk-helm-charts on GitHub, accessed November 17, 2026 | A production Grafana dashboard averaged Prometheus summary quantiles across pods and was changed to use histograms. Supports the claim that the averaging calculation is used in practice | Description read through a search index. The page itself did not load for me, so its date and merge status are not checked |
 | Kathy Lin and Colten Woo, [Unlock advanced query functionality with distribution metrics](https://www.datadoghq.com/blog/distribution-metrics/), Datadog blog, January 10, 2025 | Many vendors compute percentiles per host, and combining those values across hosts gives misleading results | Page read and wording checked |
 | Pankaj K. Agarwal, Graham Cormode, Zengfeng Huang, Jeff M. Phillips, Zhewei Wei and Ke Yi, [Mergeable Summaries](https://dimacs.rutgers.edu/~graham/pubs/html/AgarwalCormodeHuangPhillipsWeiYi13.html), ACM Transactions on Database Systems 38(4), 2013 | The definition of a mergeable summary used to judge every approach in Section 3, and the basis of C1 and C2 | Abstract read and wording checked |
+| Datadog, [ddsketch Python package](https://pypi.org/project/ddsketch/), version 3.0.1, source at [DataDog/sketches-py](https://github.com/DataDog/sketches-py) | The reused sketch: its capped store collapses the lowest bins, merge refuses sketches with different α, quantiles use rank q × (N − 1), and the protobuf decoder returns an uncapped store. Supports Decisions 1 and 2, Section 5.2 and F1 | Installed version's source read for these behaviors, and each was exercised in F1 or S1 |
+| NumPy Developers, [NumPy](https://numpy.org/), version 2.5.3 | Seeded data generation and sorting for the exact reference | Used in F1 |
 
 ### Supporting media and evidence
 
@@ -321,8 +529,11 @@ To be completed in Assignment 3: whether simulated hosts are objects in one prog
 |---|---|
 | [assets/workflow.png](assets/workflow.png), with editable sources [assets/workflow.svg](assets/workflow.svg) and [assets/workflow.mmd](assets/workflow.mmd) | Figure 1, the current workflow and where it fails |
 | [assets/fleet_p99_gap.png](assets/fleet_p99_gap.png), with editable source [assets/fleet_p99_gap.svg](assets/fleet_p99_gap.svg) | Figure 2, the averaging error for two hosts |
+| [assets/context_view.svg](assets/context_view.svg) and [assets/architecture_view.svg](assets/architecture_view.svg), with PNG copies and the generator [assets/make_architecture.py](assets/make_architecture.py) | Figures 3 and 4, the context and architecture views |
+| [experiments/feasibility_budget.py](experiments/feasibility_budget.py) and [evidence/feasibility_budget.csv](evidence/feasibility_budget.csv), [evidence/feasibility_merge_order.csv](evidence/feasibility_merge_order.csv) | Experiment F1, Section 9.2 |
+| [experiments/serialization_check.py](experiments/serialization_check.py) and [evidence/serialization_check.txt](evidence/serialization_check.txt) | Side check S1, Section 9.3 |
 
-There is no evidence directory yet because nothing has been measured. Simulation output will go in `evidence/` starting in Assignment 5.
+The `evidence/` directory holds only the Assignment 3 feasibility results. Full simulation output will be added starting in Assignment 5.
 
 ### Final document check
 
