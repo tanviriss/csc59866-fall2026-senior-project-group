@@ -17,7 +17,8 @@ Setting: 64 hosts, traffic skew 1 (host i gets a share proportional to 1/i),
 Exact p99 uses the nearest rank definition from Section 2.
 
 Run: python3 experiments/feasibility_budget.py
-Needs: Python 3, numpy, ddsketch (tested with numpy 2.5.3, ddsketch 3.0.1).
+Needs: Python 3, numpy, ddsketch (tested with Python 3.12.1 and 3.13, numpy 2.5.5
+and 2.5.3, ddsketch 3.0.1; identical results).
 Writes: evidence/feasibility_budget.csv and evidence/feasibility_merge_order.csv
 """
 

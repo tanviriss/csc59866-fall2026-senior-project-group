@@ -92,7 +92,7 @@ def context_view():
     s.box(470, 70, 260, 100, "Alibaba 2022 trace",
           ["Public microservices call graph", "data on Alibaba's servers"], REUSE)
     s.box(40, 470, 280, 110, "Open source packages",
-          ["ddsketch 3.0.1, numpy 2.5.3", "installed from PyPI"], REUSE)
+          ["ddsketch 3.0.1, numpy 2.5", "installed from PyPI"], REUSE)
     s.box(900, 250, 260, 130, "Git repository",
           ["zihad-patwary branch: code,", "DESIGN.md, results CSV.", "No raw trace data"], ACTOR)
     s.box(880, 470, 280, 110, "Reviewer (Tanvir, professor)",
