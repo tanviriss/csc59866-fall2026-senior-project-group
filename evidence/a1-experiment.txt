@@ -1,0 +1,169 @@
+Date: 2026-11-21T01:22:50Z
+OS: macOS 26.6
+
+=== Terraform version ===
+$ terraform version
+Terraform v1.17.2
+on darwin_arm64
+
+exit code: 0
+
+=== init ===
+$ terraform init -input=false
+Initializing the backend...
+
+Initializing provider plugins...
+- Finding latest version of hashicorp/local...
+- Installing hashicorp/local v2.9.1...
+- Installed hashicorp/local v2.9.1 (signed by HashiCorp)
+
+Terraform has created a lock file .terraform.lock.hcl to record the provider
+selections it made above. Include this file in your version control repository
+so that Terraform can guarantee to make the same selections by default when
+you run "terraform init" in the future.
+
+Terraform has been successfully initialized!
+
+You may now begin working with Terraform. Try running "terraform plan" to see
+any changes that are required for your infrastructure. All Terraform commands
+should now work.
+
+If you ever set or change modules or backend configuration for Terraform,
+rerun this command to reinitialize your working directory. If you forget, other
+commands will detect it and remind you to do so if necessary.
+exit code: 0
+
+=== apply (creates demo.txt) ===
+$ terraform apply -auto-approve -input=false
+
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  + create
+
+Terraform will perform the following actions:
+
+  # local_file.demo will be created
+  + resource "local_file" "demo" {
+      + content              = <<-EOT
+            hello
+        EOT
+      + content_base64sha256 = (known after apply)
+      + content_base64sha512 = (known after apply)
+      + content_md5          = (known after apply)
+      + content_sha1         = (known after apply)
+      + content_sha256       = (known after apply)
+      + content_sha512       = (known after apply)
+      + directory_permission = "0777"
+      + file_permission      = "0777"
+      + filename             = "./demo.txt"
+      + id                   = (known after apply)
+    }
+
+Plan: 1 to add, 0 to change, 0 to destroy.
+local_file.demo: Creating...
+local_file.demo: Creation complete after 0s [id=f572d396fae9206628714fb2ce00f72e94f2258f]
+
+Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
+exit code: 0
+
+=== Run 1: no change ===
+$ terraform plan -refresh-only -detailed-exitcode -input=false
+local_file.demo: Refreshing state... [id=f572d396fae9206628714fb2ce00f72e94f2258f]
+
+No changes. Your infrastructure still matches the configuration.
+
+Terraform has checked that the real remote objects still match the result of
+your most recent changes, and found no differences.
+exit code: 0
+
+(demo.txt deleted by hand, outside Terraform)
+
+=== Run 2: after the hand change ===
+$ terraform plan -refresh-only -detailed-exitcode -input=false
+local_file.demo: Refreshing state... [id=f572d396fae9206628714fb2ce00f72e94f2258f]
+
+Note: Objects have changed outside of Terraform
+
+Terraform detected the following changes made outside of Terraform since the
+last "terraform apply" which may have affected this plan:
+
+  # local_file.demo has been deleted
+  - resource "local_file" "demo" {
+      - content              = <<-EOT
+            hello
+        EOT -> null
+      - content_base64sha256 = "WJG1tSLV3whtD/CxEPvZ0hu0/HFjrzTQgoai6Eb2vgM=" -> null
+      - content_base64sha512 = "58IrmUxZ2c8rSOVJseJGZmNgRZMNPafBrLKZ0cO3+TH5Sq5B7dosKyB6NuEPi8uNRSI+VIePWzFufOO2vAGWKQ==" -> null
+      - content_md5          = "b1946ac92492d2347c6235b4d2611184" -> null
+      - content_sha1         = "f572d396fae9206628714fb2ce00f72e94f2258f" -> null
+      - content_sha256       = "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03" -> null
+      - content_sha512       = "e7c22b994c59d9cf2b48e549b1e24666636045930d3da7c1acb299d1c3b7f931f94aae41edda2c2b207a36e10f8bcb8d45223e54878f5b316e7ce3b6bc019629" -> null
+      - directory_permission = "0777" -> null
+      - file_permission      = "0777" -> null
+      - filename             = "./demo.txt" -> null
+      - id                   = "f572d396fae9206628714fb2ce00f72e94f2258f" -> null
+    }
+
+
+This is a refresh-only plan, so Terraform will not take any actions to undo
+these. If you were expecting these changes then you can apply this plan to
+record the updated values in the Terraform state without changing any remote
+objects.
+
+─────────────────────────────────────────────────────────────────────────────
+
+Note: You didn't use the -out option to save this plan, so Terraform can't
+guarantee to take exactly these actions if you run "terraform apply" now.
+exit code: 2
+
+=== Run 3: same command again ===
+$ terraform plan -refresh-only -detailed-exitcode -input=false
+local_file.demo: Refreshing state... [id=f572d396fae9206628714fb2ce00f72e94f2258f]
+
+Note: Objects have changed outside of Terraform
+
+Terraform detected the following changes made outside of Terraform since the
+last "terraform apply" which may have affected this plan:
+
+  # local_file.demo has been deleted
+  - resource "local_file" "demo" {
+      - content              = <<-EOT
+            hello
+        EOT -> null
+      - content_base64sha256 = "WJG1tSLV3whtD/CxEPvZ0hu0/HFjrzTQgoai6Eb2vgM=" -> null
+      - content_base64sha512 = "58IrmUxZ2c8rSOVJseJGZmNgRZMNPafBrLKZ0cO3+TH5Sq5B7dosKyB6NuEPi8uNRSI+VIePWzFufOO2vAGWKQ==" -> null
+      - content_md5          = "b1946ac92492d2347c6235b4d2611184" -> null
+      - content_sha1         = "f572d396fae9206628714fb2ce00f72e94f2258f" -> null
+      - content_sha256       = "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03" -> null
+      - content_sha512       = "e7c22b994c59d9cf2b48e549b1e24666636045930d3da7c1acb299d1c3b7f931f94aae41edda2c2b207a36e10f8bcb8d45223e54878f5b316e7ce3b6bc019629" -> null
+      - directory_permission = "0777" -> null
+      - file_permission      = "0777" -> null
+      - filename             = "./demo.txt" -> null
+      - id                   = "f572d396fae9206628714fb2ce00f72e94f2258f" -> null
+    }
+
+
+This is a refresh-only plan, so Terraform will not take any actions to undo
+these. If you were expecting these changes then you can apply this plan to
+record the updated values in the Terraform state without changing any remote
+objects.
+
+─────────────────────────────────────────────────────────────────────────────
+
+Note: You didn't use the -out option to save this plan, so Terraform can't
+guarantee to take exactly these actions if you run "terraform apply" now.
+exit code: 2
+
+=== Run 4: JSON output after the hand change ===
+exit code: 2
+lines mentioning resource_drift: 1
+{"@level":"info","@message":"Terraform 1.17.2","@module":"terraform.ui","@timestamp":"2026-11-20T20:22:53.920765-05:00","terraform":"1.17.2","type":"version","ui":"1.3"}
+{"@level":"info","@message":"local_file.demo: Refreshing state... [id=f572d396fae9206628714fb2ce00f72e94f2258f]","@module":"terraform.ui","@timestamp":"2026-11-20T20:22:54.059667-05:00","hook":{"resource":{"addr":"local_file.demo","module":"","resource":"local_file.demo","implied_provider":"local","resource_type":"local_file","resource_name":"demo","resource_key":null},"id_key":"id","id_value":"f572d396fae9206628714fb2ce00f72e94f2258f"},"type":"refresh_start"}
+{"@level":"info","@message":"local_file.demo: Refresh complete","@module":"terraform.ui","@timestamp":"2026-11-20T20:22:54.061595-05:00","hook":{"resource":{"addr":"local_file.demo","module":"","resource":"local_file.demo","implied_provider":"local","resource_type":"local_file","resource_name":"demo","resource_key":null}},"type":"refresh_complete"}
+{"@level":"info","@message":"local_file.demo: Drift detected (delete)","@module":"terraform.ui","@timestamp":"2026-11-20T20:22:54.066367-05:00","change":{"resource":{"addr":"local_file.demo","module":"","resource":"local_file.demo","implied_provider":"local","resource_type":"local_file","resource_name":"demo","resource_key":null},"action":"delete"},"type":"resource_drift"}
+{"@level":"info","@message":"Plan: 0 to add, 0 to change, 0 to destroy.","@module":"terraform.ui","@timestamp":"2026-11-20T20:22:54.066425-05:00","changes":{"add":0,"change":0,"import":0,"remove":0,"action_invocation":0,"action_fail":0,"operation":"plan"},"type":"change_summary"}
+
+=== Run 5: failure case (folder does not exist) ===
+$ terraform -chdir=does-not-exist plan -refresh-only -detailed-exitcode -input=false
+Error handling -chdir option: chdir does-not-exist: no such file or directory
+exit code: 1
