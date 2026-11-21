@@ -576,7 +576,7 @@ For Assignment 1, I used ChatGPT to help me better understand what the NSF was a
 
 For Assignment 2, I used Claude to help format tables to display correctly in Markdown format. As well as using Claude to format references, and synthesis some run on sentences to be more concise. 
 
-For Assignment 3, I used Claude to help me format the Mermaid diagrams and imbed them so they would properly display in Github's Markdown format. Claude was used to generate the code for e1_timeout_and_history.py. The experiment was ran locally on my machine on MacOs using the Terminal and VsCode with Claude and ChatGPT guiding me on how to execute certain terminal commands. Claude was used to format additional references added this week, aswell as formatting the tables. And like assignment 2, Claude was used to help synthesis some run on sentences to be more concise.
+For Assignment 3, I used Claude to help me format the Mermaid diagrams and imbed them so they would properly display in Github's Markdown format. Claude was used to generate the code for e1_timeout_and_history.py, a1_experiment.txt, and main.tf. The experiment was ran locally on my machine on MacOs using the Terminal and VsCode with Claude and ChatGPT guiding me on how to execute certain terminal commands. Claude was used to format additional references added this week, aswell as formatting the tables. And like assignment 2, Claude was used to help synthesis some run on sentences to be more concise.
 
 ## References
 
