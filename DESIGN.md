@@ -11,7 +11,7 @@
 
 # Progress note
 
-This is the third version of my design document. I chose Approach C. The checked wrapper because it is the only approach designed to meet the confirmation, retry, history, and never in sync after failure requirements. Section 3 now has the selection and two decision records. Section 4 has a context view and an architecture view. Section 5 defines the critical operation, run_drift_check, and links it to F1 to F5, C1, and C2. Section 9 gives the smallest build path and one experiment, which showed that a timed out check is stopped and that saved history survives a killed process. The main unresolved issue is still what a refresh only plan returns when it finds drift, because I have not run that test yet. Next I will try that test and start the data and algorithm work for Assignment 4.
+This is the third version of my design document. I chose Approach C. The checked wrapper because it is the only approach designed to meet the confirmation, retry, history, and never in sync after failure requirements. Section 3 has the selection and two decision records. Section 4 has a context view and an architecture view. Section 5 defines the critical operation, run_drift_check, and links it to F1 to F5, C1, and C2. Section 9 has the smallest build path and two experiments. E1 showed that a timed out check is stopped and that saved history survives a killed process. E2 showed that a refresh only plan returns exit code 2 when a resource is deleted outside Terraform. The main open issue is that I only tested one kind of drift. Next week I will test other kinds in Assignment 4.
 
 # Contents
 
@@ -76,7 +76,7 @@ https://developer.hashicorp.com/terraform/internals/machine-readable-ui
 
 *Observed.* I have no observations of this problem in software development, since my experience with DevOps is limited. I have not built or measured anything yet.
 
-*Assumed.* I assume lost, repeated, and outdated readings happen often enough in real Terraform use to matter. I assume a refresh-only plan run with the detailed exit code option returns exit code 2 when it finds drift. HashiCorp documents the exit codes in general, but not for refresh-only plans, so I will test it. None of this has been proven as of now.
+*Assumed.* I assume lost, repeated, and outdated readings happen often enough in real Terraform use to matter. I assume a refresh-only plan run with the detailed exit code option returns exit code 2 when it finds drift. HashiCorp documents the exit codes in general, but not for refresh-only plans, so I will test it. None of this has been proven as of now. **Update for Assignment 3:** I ran the test (E2 in Section 9.3), and it returned exit code 2 for a resource deleted outside Terraform.
 
 *Missing evidence.* I have not found data on how often drift checkers get failed or outdated readings. The NSF award is still active, but I haven't found any large studies that have produced results yet. The Amazon Web Services (AWS) CloudFormation guide is related evidence that a drift check can fail to finish, because it has a status for that case (see Section 3). https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-stack-drift.html
 
@@ -93,6 +93,8 @@ My solution direction is tentative. The three answers, the retry rule, and the a
 **What I still don't know.** HashiCorp's documentation says exit code 1 is an error and exit code 2 means changes are present. So in general, a wrapper, which is a tool that runs Terraform and reads its results, can tell a failed check from a changed one. What I do not know is whether that holds for a refresh-only plan that finds drift. I also do not know whether real Terraform users will understand the three answers my tool gives.
 
 To answer this, I have read HashiCorp's official page for the plan command, which confirms what exit codes 0, 1, and 2 mean. It does not say what a refresh-only plan returns when it finds drift. My first test is to run a refresh-only plan with the detailed exit code option on a small project, change a resource by hand, and write down the exit code. If it returns 2, the tool can use exit codes. If it does not, I will read the machine-readable output for resource_drift messages instead. Second, as I build, I will try the tool on small real Terraform projects to see what it reports when Terraform fails, repeats a check, or gives an old result. If users misunderstand the unknown answer, I would change its wording and the report layout.
+
+**Update for Assignment 3.** I ran the first test on a small project. The results are in Section 9.3. The exit code was 2 when a resource was changed outside Terraform, so the tool can use exit codes.
 
 # 2 Requirements and system specification
 
@@ -141,11 +143,11 @@ An ordinary case and some unsuccessful cases, using the fake Terraform. Results 
 
 | ID | Assumption | How I will check it |
 |---|---|---|
-| A1 | A refresh-only plan with the detailed exit code option returns exit code 2 when something was changed outside Terraform. The documentation gives the exit codes in general but not for this mode. If it is wrong, F4 has to change, and I would read resource_drift messages from the JSON output instead. | Run it on a small project, change a resource by hand, and write down the exit code. |
-| A2 | Running a refresh-only plan again is safe, because a plan alone does not carry out changes. It could still be slowed by a lock or by limits on a cloud service. | Run it twice in a row on the test project and compare the results and the saved state. |
+| A1 | A refresh-only plan with the detailed exit code option returns exit code 2 when something was changed outside Terraform. The documentation gives the exit codes in general but not for this mode. If it is wrong, F4 has to change, and I would read resource_drift messages from the JSON output instead. | Run it on a small project, change a resource by hand, and write down the exit code. Tested in E2 (Section 9.3). It returned 2 for a deleted local file on Terraform v1.17.2. |
+| A2 | Running a refresh-only plan again is safe, because a plan alone does not carry out changes. It could still be slowed by a lock or by limits on a cloud service. | Run it twice in a row on the test project and compare the results and the saved state. Tested in E2. Both runs gave the same exit code and output, and the state file was unchanged. |
 | A3 | The test project is small and uses resources that can run on my own computer, so no paid cloud account is needed. | Pick the resources and confirm the project runs before building the tool. |
 | A4 | One person runs the tool on one computer, and nobody else is changing the same project during a check. | Test with one user only. Treat a held lock as a failed check, as in the examples. |
-| A5 | The JSON output reports resource_drift messages in refresh-only mode. The reference says this when drift is detected during planning, but it does not name refresh-only mode. | Run the JSON option on the same hand-changed project and look for a resource_drift message. |
+| A5 | The JSON output reports resource_drift messages in refresh-only mode. The reference says this when drift is detected during planning, but it does not name refresh-only mode. | Run the JSON option on the same hand-changed project and look for a resource_drift message. Tested in E2. The JSON output had one resource_drift line for the deleted file. |
 
 ## 2.5 Constraints
 
@@ -199,7 +201,7 @@ I am selecting Approach C, the checked wrapper, built as a Python command line t
 
 ### Decision 1: Which approach to build, and which signal it reads
 
-**Context.** My problem is that a drift check can say nothing changed when it never got a good look at the real servers (Section 1). The requirements need a status that is never in sync after a failed or disagreeing check (C1), a retry rule (F3), and a saved history (F5). Terraform's exit codes are documented in general, but I do not yet know what a refresh-only plan returns when it finds drift (A1).
+**Context.** My problem is that a drift check can say nothing changed when it never got a good look at the real servers (Section 1). The requirements need a status that is never in sync after a failed or disagreeing check (C1), a retry rule (F3), and a saved history (F5). Terraform's exit codes are documented in general, but at first I did not know what a refresh-only plan returns when it finds drift (A1). I tested that later in E2 (Section 9.3).
 
 **Options.**
 
@@ -210,11 +212,11 @@ I am selecting Approach C, the checked wrapper, built as a Python command line t
 
 **Choice.** Approach C using only the exit code for the first working path. The JSON output stays as a fallback for A1.
 
-**Reasons.** Options 1 and 2 cannot meet F4, F5, and C1, as the comparison table shows. Between options 3 and 4, the exit code is the simplest signal, and it is documented in general (HashiCorp plan page). Reading the JSON output means parsing a stream of messages, which is more code, and I do not yet know whether A5 holds in refresh-only mode. Starting with one signal keeps the first path small and easy to test with the fake Terraform.
+**Reasons.** Options 1 and 2 cannot meet F4, F5, and C1, as the comparison table shows. Between options 3 and 4, the exit code is the simplest signal, and it is documented in general (HashiCorp plan page). Reading the JSON output means parsing a stream of messages, which is more code, and at that point I did not know whether A5 holds in refresh-only mode (E2 later showed it does for a deleted resource). Starting with one signal keeps the first path small and easy to test with the fake Terraform.
 
-**Consequences.** The tool depends on A1. If a refresh-only plan does not return exit code 2 for drift, the first path will have a wrong signal. The retry and confirm rules add a cost. With the proposed limits, the worst case is 6 checks of up to 120 seconds each, which is 6 x 120 = 720 seconds, or 12 minutes, before the tool gives up with unknown. The tool also needs more code than Approach B.
+**Consequences.** The tool depends on A1. E2 confirmed it for one kind of drift, a deleted local file, but other kinds are not tested yet. If a refresh-only plan does not return exit code 2 for some kind of drift, the first path will have a wrong signal. The retry and confirm rules add a cost. With the proposed limits, the worst case is 6 checks of up to 120 seconds each, which is 6 x 120 = 720 seconds, or 12 minutes, before the tool gives up with unknown. The tool also needs more code than Approach B.
 
-**Reconsider if.** The A1 test shows that a refresh-only plan does not return exit code 2 when it finds drift. Then I switch the signal to resource_drift messages, which is option 4 without the exit code for drift. I would also reconsider if a real project makes the worst case of 12 minutes too slow, or if test users misread the unknown status.
+**Reconsider if.** A later test shows that a refresh-only plan does not return exit code 2 for some kind of drift. Then I switch the signal to resource_drift messages, which is option 4 without the exit code for drift. I would also reconsider if a real project makes the worst case of 12 minutes too slow, or if test users misread the unknown status.
 
 ### Decision 2: Where to save the check history
 
@@ -318,7 +320,7 @@ flowchart LR
 
 **Why one program and not several services.** A service boundary adds messages, setup, and new ways to fail. The CLI, the status engine, the check runner, and the history store can all be modules in one program, so I did not split them into services. This is my own design judgment.
 
-**How this connects to partial failure.** In this design, a timeout means driftcheck stopped waiting. It does not tell me whether Terraform finished reading the real servers. Because a refresh-only plan alone does not carry out changes (HashiCorp plan page), repeating the check is safe, which is assumption A2 and is not yet tested. So the tool does not need a request ID like the booking example in the course handbook. It only needs to treat a timeout as a failed check and ask again.
+**How this connects to partial failure.** In this design, a timeout means driftcheck stopped waiting. It does not tell me whether Terraform finished reading the real servers. Because a refresh-only plan alone does not carry out changes (HashiCorp plan page), repeating the check is safe, which is assumption A2. E2 supported it for a deleted local file, but not for a lost connection or a held lock. So the tool does not need a request ID like the booking example in the course handbook. It only needs to treat a timeout as a failed check and ask again.
 
 **What I build, reuse, and simulate.** I build the four parts inside the driftcheck process. I reuse Terraform, SQLite, and Python's standard library. I simulate the real servers with local test resources, and I simulate Terraform with the fake script when I want to control the exit codes. These simulations have limits. The fake Terraform only tests my rules, so it says nothing about how real Terraform behaves. The local resources do not show cloud network failures.
 
@@ -449,7 +451,7 @@ The tool exits with 64. No status word is printed and nothing is saved.
 - **Reasons for failure.** The report does not yet tell "Terraform is not set up" apart from other failures. Both would show as failed checks.
 - **Limits.** I have not decided whether the limits should become command line options.
 - **Two runs at once.** Two runs sharing one history file are not handled, because A4 assumes one run at a time.
-- **Drift exit code.** Whether a refresh-only plan returns exit code 2 on drift is still A1, and this whole interface depends on it.
+- **Drift exit code.** E2 showed exit code 2 for a deleted local file. Other kinds of drift, such as a changed setting, are not tested yet, and this interface depends on them also giving exit code 2.
 
 # 6 Data structure design
 
@@ -476,7 +478,7 @@ The smallest working path is one run of `driftcheck` on one project folder, usin
 | 3 | The check runner, which starts a program with a time limit | A stuck fake is stopped at the limit and counts as a failed check | F1, F3 | Planned |
 | 4 | The history store in SQLite | A saved check is still there after the program is closed and run again | F5 | Planned |
 | 5 | The CLI that joins the parts and prints the report | One command on the fake gives the output in Section 5.2, Example 1 | F1 to F5 | Planned |
-| 6 | One small real Terraform project with local resources | The tool runs on it and I record what happens (A1, A3, A5) | A1, A3, A5 | Planned, see 9.3 |
+| 6 | One small real Terraform project with local resources | The tool runs on it and I record what happens (A1, A3, A5) | A1, A3, A5 | The commands were tried by hand in E2 (9.3). The tool is not built yet |
 
 Section 10 will turn the checks into test plans. Reuse, simulation, and what is left out are in Section 4.2.
 
@@ -514,32 +516,36 @@ all 5 runs kept only the committed row: True
 
 **Resulting decision.** I keep Decision 2 and the check runner design, where a timeout counts as a failed check and each check is saved as soon as it ends. I added the two open items about Terraform's own processes and its state lock to Section 5.3, and I will test them on a real Terraform project in Assignment 5.
 
-## 9.3 Still open: the exit code test (A1 and A5)
+## 9.3 Feasibility experiment E2: exit codes and JSON output on drift (A1, A2, A5)
 
-The most important open question is still A1, whether a refresh-only plan returns exit code 2 when it finds drift. I have not run that test yet, so A1 and A5 are still unconfirmed. Here is the test plan.
+**Question.** Does `terraform plan -refresh-only -detailed-exitcode` return exit code 0 when nothing changed and exit code 2 when something was changed outside Terraform? Does a failed run give exit code 1? Does the `-json` option print a resource_drift message? Does running the plan twice in a row give the same result? This is the most important question because F2, F4, and C1 depend on the exit code, and Decision 1 chose the exit code as the first signal.
 
-1. Make a folder with this `main.tf`. It uses a local file, so no cloud account is needed (A3).
+**Procedure.** I ran this on my laptop. It runs macOS 26.6. I used Terraform v1.17.2 (darwin_arm64) and the hashicorp/local provider v2.9.1. The test project has one `local_file` resource, so no cloud account is needed (A3). The setup is in `evidence/a1-project/main.tf`, and the script `evidence/run_a1.sh` runs the steps and saves the output.
 
-```text
-terraform {
-  required_providers {
-    local = { source = "hashicorp/local" }
-  }
-}
+1. Run `terraform init` and `terraform apply` to create `demo.txt`.
+2. Run `terraform plan -refresh-only -detailed-exitcode -input=false` (Run 1, no change).
+3. Delete `demo.txt` by hand, outside Terraform.
+4. Run the same plan command twice (Runs 2 and 3).
+5. Run it again with `-json` added and count the lines that mention resource_drift (Run 4).
+6. Run the same plan with `-chdir` pointing at a folder that does not exist (Run 5, a failure).
 
-resource "local_file" "demo" {
-  filename = "${path.module}/demo.txt"
-  content  = "hello\n"
-}
-```
+**Evidence.** The full output is in [evidence/a1-experiment.txt](evidence/a1-experiment.txt). It was recorded on November 20, 2026.
 
-2. Run `terraform init` and `terraform apply`.
-3. Run `terraform plan -refresh-only -detailed-exitcode -input=false` and write down the exit code. This is the no change case.
-4. Delete `demo.txt` by hand and run the same command twice. Write down both exit codes (A1 and A2).
-5. Run the same command with `-json` added and look for a resource_drift message (A5).
-6. Run `terraform -chdir=does-not-exist plan -refresh-only -detailed-exitcode -input=false` to see the exit code for a failure.
+| Run | What I did | Exit code | What the output showed |
+|---|---|---|---|
+| 1 | No change | 0 | "No changes. Your infrastructure still matches the configuration." |
+| 2 | After deleting `demo.txt` by hand | 2 | "Objects have changed outside of Terraform" and `local_file.demo has been deleted` |
+| 3 | Same command again | 2 | The same output as Run 2 |
+| 4 | Same command with `-json` | 2 | One line with type resource_drift, "Drift detected (delete)" |
+| 5 | `-chdir` to a folder that does not exist | 1 | "Error handling -chdir option: chdir does-not-exist: no such file or directory" |
 
-If step 4 does not give exit code 2, Decision 1 says I switch to the resource_drift messages. Until then, steps 1 to 5 of the build path in 9.1 can be built and tested with the fake Terraform, so this step does not hold up the rest.
+After the runs, I also opened `terraform.tfstate`. It still lists `local_file.demo` (serial 1) even though `demo.txt` was gone, so the plans did not update the state.
+
+**Finding.** A1 held in this test. The exit code was 0 for no change, 2 for a change made outside Terraform, and 1 for a failed run. So the tool can tell a changed project from a failed check by the exit code. A5 held too, because the JSON output had a resource_drift message for the deleted file. A2 held in this case. Running the plan again gave the same exit code and output, and the state file was not changed.
+
+**Limits.** I only tested one kind of drift, a deleted local file. I did not test a changed setting on an existing resource, and I do not know whether changing the contents of the file counts as drift for this provider. I also did not test cloud resources, a lost connection, a lock held by another run, or a slow run. The failure in Run 5 is an easy error, a missing folder. This is one Terraform version, one provider version, and one laptop, and I repeated the plan only twice. A real cloud service could act differently.
+
+**Resulting decision.** I keep Decision 1 and use the exit code as the first signal. The resource_drift messages stay as the fallback, and now I know they work for a deleted resource. I updated assumptions A1, A2, and A5 in Section 2.4. Next, I will test a changed setting in Assignment 5, because a deleted file is the easiest kind of drift to detect.
 
 # 10 Testing and verification
 
@@ -555,16 +561,17 @@ Not due yet. This section is planned for Assignment 4.
 |---|---|---|
 | November 6, 2026 | First version. Added the problem, workflow image, stakeholders, and scope | Assignment 1 |
 | November 15, 2026 | Second version. Revised Section 1, wrote the requirements in Section 2, and drafted the comparison in Section 3 | Assignment 2. Replaced library evidence with HashiCorp's official exit code documentation, added a JSON output fallback, renamed requirements to the course scheme (F, C, Q), added Approach D evidence from the AWS API pages, and fixed an overlap between the retry and confirmation rules |
-| November 20, 2026 | Third version. Selected Approach C and wrote two decision records in Section 3, added the context and architecture views in Section 4, added the component table and the run_drift_check contract in Section 5, and began Section 9 with a build path and experiment E1 | Assignment 3. Decided to use only the exit code as the first signal and to save history in SQLite. E1 supported both the timeout rule and the SQLite choice. The exit code test for A1 has not been run yet |
+| November 20, 2026 | Third version. Selected Approach C and wrote two decision records in Section 3, added the context and architecture views in Section 4, added the component table and the run_drift_check contract in Section 5, and began Section 9 with a build path and two experiments, E1 and E2 | Assignment 3. Decided to use only the exit code as the first signal and to save history in SQLite. E1 supported both the timeout rule and the SQLite choice. E2 confirmed A1, A2, and A5 for a deleted local file |
 
 | Open question | Why it matters | Next action |
 |---|---|---|
-| Does a refresh-only plan with the detailed exit code option return exit code 2 when it finds drift? | Requirements F2 and F4 depend on it | Run the test on a small project (see Section 9.3). If it does not, read resource_drift messages from the JSON output |
+| Does a refresh-only plan return exit code 2 for kinds of drift other than a deleted file, such as a changed setting? | Requirements F2 and F4 depend on it, and E2 only covered a deleted local file | Test a changed setting in Assignment 5. If it does not return 2, read resource_drift messages from the JSON output |
 | Are the proposed limits (3 checks, 120 seconds, 24 hours) reasonable? | Requirements F3 and F5 use them | Test on a small project and adjust |
 | Does a killed Terraform leave a state lock behind, and do the processes it starts stop when the time limit passes? | The check runner's time limit in F3 depends on it, and E1 only tested a simple stand-in | Test on a real Terraform project in Assignment 5 |
 | Should a failed save of the history count as unknown, and should the report separate "Terraform is not set up" from other failures? | They change the outcomes in Section 5.2 | Decide in Assignment 4 |
 
-**Assistance and reuse.**
+**Assistance and reuse.** 
+
 For Assignment 1, I used ChatGPT to help me better understand what the NSF was asking for to be built as the topic is new to me and I have limited experience with DevOps. 
 
 For Assignment 2, I used Claude to help format tables to display correctly in Markdown format. As well as using Claude to format references, and synthesis some run on sentences to be more concise. 
@@ -593,3 +600,4 @@ For Assignment 3, I used Claude to help me format the Mermaid diagrams and imbed
 - Workflow diagram (Workflow.png). Shows where the reading can go wrong.
 - Context view and architecture view (Mermaid diagrams in Section 4).
 - Experiment E1 script and output (evidence/e1_timeout_and_history.py and evidence/e1-experiment.txt).
+- Experiment E2 setup, script, and output (evidence/a1-project/main.tf, evidence/run_a1.sh, and evidence/a1-experiment.txt).
