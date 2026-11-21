@@ -1,0 +1,14 @@
+Python 3.9.6 | sqlite library 3.51.0
+
+== Part A: timeout on a stuck child process ==
+TimeoutExpired raised: True
+elapsed seconds: 2.01 (limit was 2)
+child pid 13346 still running after timeout: False
+
+== Part B: history rows after the process is killed ==
+run 1: child killed with SIGKILL, rows found after reopening: ['committed row']
+run 2: child killed with SIGKILL, rows found after reopening: ['committed row']
+run 3: child killed with SIGKILL, rows found after reopening: ['committed row']
+run 4: child killed with SIGKILL, rows found after reopening: ['committed row']
+run 5: child killed with SIGKILL, rows found after reopening: ['committed row']
+all 5 runs kept only the committed row: True
