@@ -11,7 +11,7 @@
 
 # Progress note
 
-This is the third version of my design document. I chose Approach C. The checked wrapper because it is the only approach designed to meet the confirmation, retry, history, and never in sync after failure requirements. Section 3 has the selection and two decision records. Section 4 has a context view and an architecture view. Section 5 defines the critical operation, run_drift_check, and links it to F1 to F5, C1, and C2. Section 9 has the smallest build path and two experiments. E1 showed that a timed out check is stopped and that saved history survives a killed process. E2 showed that a refresh only plan returns exit code 2 when a resource is deleted outside Terraform. The main open issue is that I only tested one kind of drift. Next week I will test other kinds in Assignment 4.
+This is the third version of my design document. I chose Approach C, the checked wrapper, and wrote two decision records in Section 3. Section 4 has the context and architecture views, and Section 5 defines run_drift_check and links it to its requirements. Section 9 has the smallest build path and two experiments. E1 tested timeouts and saved history. E2 showed that a refresh only plan returns exit code 2 when a resource is deleted outside Terraform. I also answered feedback from Assignments 1 and 2. I clarified what the tool compares, added the first run with no history, and said that two matching checks do not prove freshness. The main open issue is that I still have no evidence of how often small teams see failed or old readings.
 
 # Contents
 
@@ -32,7 +32,7 @@ This is the third version of my design document. I chose Approach C. The checked
 
 **Problem and affected people.** Development and Operations (DevOps) is how many software teams build an app, test it, and put it on real servers without doing each step by hand. The settings behind those steps live in configuration files, which are text files that define how things should be set up. Those files must keep matching the code and the real servers. Configuration drift is when they slowly stop matching, because of software changes, environment changes, mistakes, or unknown errors. Think of the files as recipe cards and the servers as the kitchen. Drift is when someone changes the kitchen and never updates the recipe cards. The National Science Foundation (NSF) award associated with this problem is https://www.nsf.gov/awardsearch/show-award?AWD_ID=2537321.
 
-Teams use a drift check to catch this. A drift check is a program that compares the files to the real servers and reports any differences. To do that, it has to look at the real servers, and that look can go wrong for a lot of reasons. The connection can drop, the same look can be sent twice, or the answer can be old. The problem is what a drift check should report when its look goes wrong.
+Teams use a drift check to catch this. A drift check is a program that compares what Terraform has saved about the servers to what the real servers look like now, and reports any differences. To do that, it has to look at the real servers, and that look can go wrong for a lot of reasons. The connection can drop, the same look can be sent twice, or the answer can be old. The problem is what a drift check should report when its look goes wrong.
 
 **Problem statement.** In one sentence, the problem is that a drift check can report that nothing has changed when it never got a successful look at the real servers. A good answer for a team is a check that says in sync only after a successful look, and says unknown otherwise.
 
@@ -41,6 +41,10 @@ Teams use a drift check to catch this. A drift check is a program that compares 
 Here comes the problem. In one case, the connection to the cloud is lost and no answer comes back. In another, a retry sends the same request twice and the two answers differ. In a third, the answer is outdated and still shows the old security group, so the check says nothing changed while the real machine has different rules. I have not documented that Terraform does this. But a research paper titled "Robust Infrastructure by Verification Agents" (RIVA) says that when tools give incomplete, stale, or misleading output, an automated agent may conclude a system is healthy even though drift has occurred (Abuzakuk et al., sec. 2.3). Its agents run on large language models (LLMs), which are artificial intelligence programs that work with text. https://arxiv.org/pdf/2603.02345
 
 **Boundaries.** I will focus on one tool, Terraform. The question I am scoping in on is whether its drift check can be trusted when a reading is lost, repeated, or outdated. I will not try to stop drift from occurring or to repair it (tentative).
+
+**What the tool compares.** Three things matter in this project. The desired configuration is the Terraform files. The saved state is Terraform's own record of what it built. The latest live observation is what Terraform reads from the real servers when the check runs. My tool does not compare configuration files with each other. It runs Terraform's refresh-only plan, which compares the saved state with the live observation. So drifted means that the real servers differ from Terraform's saved state. It does not mean that they differ from the files. Terraform's own output in experiment E2 (Section 9.3) described the change as happening outside Terraform since the last apply, which fits this reference.
+
+**Why this is a distributed problem, and the decision it supports.** A check crosses three separate parts: my tool, Terraform, and the real servers. They talk through messages, and each can fail on its own. My tool can end up knowing the result of only one part. The engineer's decision is whether the environment changed, and whether this reading can be trusted. Based on that, the engineer investigates, fixes the servers, updates the files, or runs the check again later. The tool helps by saying unknown when a reading failed and by showing how old the last good check is, so the engineer does not have to guess.
 
 **Current workflow.**
 
@@ -78,7 +82,7 @@ https://developer.hashicorp.com/terraform/internals/machine-readable-ui
 
 *Assumed.* I assume lost, repeated, and outdated readings happen often enough in real Terraform use to matter. I assume a refresh-only plan run with the detailed exit code option returns exit code 2 when it finds drift. HashiCorp documents the exit codes in general, but not for refresh-only plans, so I will test it. None of this has been proven as of now. **Update for Assignment 3:** I ran the test (E2 in Section 9.3), and it returned exit code 2 for a resource deleted outside Terraform.
 
-*Missing evidence.* I have not found data on how often drift checkers get failed or outdated readings. The NSF award is still active, but I haven't found any large studies that have produced results yet. The Amazon Web Services (AWS) CloudFormation guide is related evidence that a drift check can fail to finish, because it has a status for that case (see Section 3). https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-stack-drift.html
+*Missing evidence.* I have not found data on how often drift checkers get failed or outdated readings. Earlier feedback asked for evidence that this matters to small Terraform teams. I still do not have an operator's report, and a fake command can only test my tool's logic, so it cannot show how often real failures happen. This stays open. The NSF award is still active, but I haven't found any large studies that have produced results yet. The Amazon Web Services (AWS) CloudFormation guide is related evidence that a drift check can fail to finish, because it has a status for that case (see Section 3). https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-stack-drift.html
 
 **Six-week contribution.** For the first six weeks I will build the smallest working version of my tool. It checks one Terraform project by running the refresh-only plan and reports one of three answers, in sync, drifted, or unknown. If Terraform fails or cannot reach the cloud, the tool says unknown and never in sync. It never changes any infrastructure.
 
@@ -86,7 +90,7 @@ https://developer.hashicorp.com/terraform/internals/machine-readable-ui
 
 The comparison I will make is between running the refresh only plan by hand and running my tool, on the same small real Terraform project and the same four situations, which are a change made outside Terraform, a failed run, a repeated run, and an old result. I will judge each by correctness. I expect to use Python, the free Terraform program, and a free local setup. For tests, a fake Terraform stand in will return the exit codes I choose.
 
-My solution direction is tentative. The three answers, the retry rule, and the age warning are my first design, and feedback from real users may change them. The work is manageable for one student because it wraps one existing command, needs little code, and needs no paid cloud account. Each feature answers one problem in my paper. Unknown and retries cover a lost reading, two matching results cover a repeated reading, and the age warning covers an outdated reading.
+My solution direction is tentative. The three answers, the retry rule, and the age warning are my first design, and feedback from real users may change them. The work is manageable for one student because it wraps one existing command, needs little code, and needs no paid cloud account. Each feature answers one problem in my paper. Unknown and retries cover a lost reading, two matching results cover a one-time odd reading, and the age warning covers an outdated reading. Two matching results from the same tool are not independent proof, so they cannot catch an old answer that repeats. I list that as a limit in Section 2.5.
 
 **Exclusions.** I will exclude every tool other than Terraform, source code and application drift, LLM agents, automatic repair, and a web dashboard.
 
@@ -106,14 +110,15 @@ This section says what the tool must do, in behavior a person can observe. It do
 
 | ID | Type | Requirement | Acceptance check |
 |---|---|---|---|
-| F1 | Functional | For one project folder, the tool runs one check and records its exit code and the time it ran. The check uses the refresh-only option, the detailed exit code option, and the option that turns off prompts for input variables, so an automated run does not stop to ask a question. | The fake Terraform returns 0. Its log shows one command with those three options, and the tool saved code 0 with a time. |
+| F1 | Functional | For one project folder, the tool runs a check, and more checks when F3 or F4 call for them. It records the exit code and the time of every check. Each check uses the refresh-only option, the detailed exit code option, and the option that turns off prompts for input variables, so an automated run does not stop to ask a question. | The fake Terraform returns 0, then 0. Its log shows two commands, each with those three options, and the tool saved code 0 with a time for each. |
 | F2 | Functional | After checking, the tool prints exactly one status word, which is in sync, drifted, or unknown. | For every fake result in Section 2.2, the output has exactly one status word, and it matches the table. |
 | F3 | Functional | If a check fails, the tool runs another check. It stops and reports unknown after 3 failed checks in a row. It also stops after 6 checks in total. Both limits are proposed. A check that runs longer than 120 seconds (proposed) counts as failed. | The fake returns 1 every time. The fake was run exactly 3 times and the status is unknown. The fake returns 0, 1, 0, 1, 0, 1. The fake was run exactly 6 times and the status is unknown. |
 | F4 | Functional | A good check with exit code 2 gives drifted right away. A good check with exit code 0 needs the very next check to also be 0, and two 0 results in a row give in sync. If the next check is 2, the status is unknown, because the checks disagreed. If the next check fails, the earlier 0 no longer counts and the tool keeps going under F3. | The fake returns 2, which gives drifted. It returns 0 then 0, which gives in sync. It returns 0 then 2, which gives unknown. It returns 0, 1, 0, 0, which gives in sync, because the failure reset the count. |
-| F5 | Functional | The tool saves the time and result of every check. The report shows the time of the last good check and says too old when that check is more than 24 hours old (proposed). | A saved good check is 30 hours old and the new run fails 3 times. The report shows that time and the words too old. A saved good check is 1 hour old, so the report does not say too old. The saved record is still there after the tool is closed and run again. |
+| F5 | Functional | The tool saves the time and result of every check. The report shows the time of the last good check and says too old when that check is more than 24 hours old (proposed). | A saved good check is 30 hours old and the new run fails 3 times. The report shows that time and the words too old. A saved good check is 1 hour old, so the report does not say too old. The saved record is still there after the tool is closed and run again. If no good check was ever saved, the report says the last good check is none. With an empty history file and the fake returning 1, 1, 1, the report says none and the status is unknown. |
 | C1 | Correctness rule | The tool reports in sync only when its final two checks both ended with exit code 0. A failed or disagreeing check never produces in sync. | Run every sequence of up to 6 fake results using 0, 1, 2, and a timeout. Whenever the output is in sync, the final two results were both 0. |
 | C2 | Correctness rule | The tool never changes infrastructure or Terraform's record of it. It only runs the refresh-only plan. | The fake Terraform logs every command it receives. In all tests, each command is a plan with the refresh-only option. None is an apply, a refresh, or a destroy. |
-| Q1 | Quality target (proposed, not measured) | In at least 100 randomized runs, the tool reports in sync falsely 0 times. Each run uses the fake Terraform with a random sequence of 0, 1, 2, and timeouts. A run that times out stays in the 100 runs. | Count the runs where the output is in sync but the final two fake results were not both 0. The count must be 0. |
+| C3 | Correctness rule | The tool never presents two matching results as proof that a reading was fresh. A report that says in sync shows the times of the checks and says that the tool cannot detect an old answer that repeats. | A stand-in returns the same value, 0 then 0, as if the answer were stale. The output is in sync, and it still has the note and the check times. |
+| Q1 | Quality target (proposed, not measured) | In at least 100 randomized runs, the tool breaks rule C1 0 times. Each run uses the fake Terraform with a random sequence of 0, 1, 2, and timeouts. A run that times out stays in the 100 runs. This tests the sequence rules only. It does not show that the real servers were read correctly. | Count the runs where the output is in sync but the final two fake results were not both 0. The count must be 0. A separate check uses a small project where I know the real drift (Section 9.1). |
 
 ## 2.2 Examples
 
@@ -121,7 +126,7 @@ An ordinary case and some unsuccessful cases, using the fake Terraform. Results 
 
 | Fake Terraform results | Expected output |
 |---|---|
-| 0, then 0 (ordinary case) | Status: in sync. Two checks agree. Last good check: now. |
+| 0, then 0 (ordinary case) | Status: in sync. Two checks agree. This does not prove the readings were fresh. Last good check: now. |
 | 2 | Status: drifted. Terraform reported changes. Last good check: now. |
 | 0, then 2 | Status: unknown. The two checks disagreed. |
 | 1, then 1, then 1 | Status: unknown. Terraform failed 3 times. The report shows the last good check and its age. |
@@ -155,6 +160,7 @@ An ordinary case and some unsuccessful cases, using the fake Terraform. Results 
 - It is a command line tool written in Python.
 - It uses free tools and no paid cloud account.
 - It is built by one student in one semester.
+- The tool cannot tell whether an answer from the real servers is old. It can only show when it checked and how old the last good check is. Two matching checks from the same tool are not independent confirmation.
 - Terraform must be installed on the same computer.
 - The scheduled job file for GitHub Actions is a stretch goal and not required here.
 
@@ -372,10 +378,10 @@ In the code, the CLI calls `run_drift_check(project_dir, history_file, terraform
 Status: <in sync | drifted | unknown>
 Reason: <one sentence>
 Checks run: <number>
-Last good check: <UTC time> (<age>)   or   none
+Last good check: <UTC time> (<age>), <no changes | changes present> against the saved state   or   none
 ```
 
-The age line adds `too old to trust` when the last good check is more than 24 hours old. The tool's exit code is 0 for in sync, 10 for drifted, 20 for unknown, and 64 for a usage error. These numbers are my own proposal. The idea is that any status other than in sync stops an automated job.
+For in sync, the reason also says that two matching checks do not prove the readings were fresh. The age line adds `too old to trust` when the last good check is more than 24 hours old. The tool's exit code is 0 for in sync, 10 for drifted, 20 for unknown, and 64 for a usage error. These numbers are my own proposal. The idea is that any status other than in sync stops an automated job.
 
 **State changes.** Each check adds one record to the history file, right after that check ends and before the next one starts. This happens even when the check failed. Nothing else is changed. The tool does not change infrastructure or Terraform's record of it (C2). Terraform may hold its state lock for a moment during a plan, which is Terraform's own behavior (HashiCorp plan page). Which checks count toward a status uses only the checks of the current run. Earlier runs only supply the last good check for the age line. A good check is one that ended with exit code 0 or 2, as defined in Section 2.
 
@@ -398,9 +404,9 @@ Example 1, ordinary case. The fake Terraform returns 0 then 0.
 ```text
 $ driftcheck ./project --terraform ./fake_terraform
 Status: in sync
-Reason: Two checks in a row agreed.
+Reason: Two checks in a row agreed. This does not prove the readings were fresh.
 Checks run: 2
-Last good check: 2026-11-20 15:00:03 UTC (just now)
+Last good check: 2026-11-20 15:00:03 UTC (just now), no changes against the saved state
 ```
 
 The tool exits with 0. The history file gains these two records.
@@ -416,7 +422,7 @@ Example 2, drift. The fake Terraform returns 2.
 Status: drifted
 Reason: Terraform reported changes.
 Checks run: 1
-Last good check: 2026-11-19 15:10:00 UTC (just now)
+Last good check: 2026-11-20 15:10:00 UTC (just now), changes present against the saved state
 ```
 
 The tool exits with 10.
@@ -427,7 +433,7 @@ Example 3, failure with an old saved check. The history file has a good check fr
 Status: unknown
 Reason: Terraform failed 3 times in a row.
 Checks run: 3
-Last good check: 2026-11-19 09:00:00 UTC (30 hours ago, too old to trust)
+Last good check: 2026-11-19 09:00:00 UTC (30 hours ago, too old to trust), no changes against the saved state
 ```
 
 The tool exits with 20. The three failed checks are saved too.
@@ -441,7 +447,18 @@ Error: project folder not found: ./does-not-exist
 
 The tool exits with 64. No status word is printed and nothing is saved.
 
-**Link to requirements.** run_drift_check carries out F1 (the check runner), F2 (one status word), F3 and F4 (the status engine's retry and confirm rules), F5 (the history store and the age line), C1 (in sync only after two 0 results), and C2 (only the refresh-only plan is ever run). The acceptance checks in Section 2.1 apply to it directly.
+Example 5, first run with no history. The history file is empty, and the fake Terraform returns 1, 1, 1.
+
+```text
+Status: unknown
+Reason: Terraform failed 3 times in a row.
+Checks run: 3
+Last good check: none
+```
+
+The tool exits with 20, and the three failed checks are saved.
+
+**Link to requirements.** run_drift_check carries out F1 (the check runner), F2 (one status word), F3 and F4 (the status engine's retry and confirm rules), F5 (the history store and the age line), C1 (in sync only after two 0 results), C3 (the freshness note), and C2 (only the refresh-only plan is ever run). The acceptance checks in Section 2.1 apply to it directly.
 
 ## 5.3 Details still being worked out
 
@@ -474,11 +491,11 @@ The smallest working path is one run of `driftcheck` on one project folder, usin
 | Step | What I build | Done when | Requirements | Status |
 |---|---|---|---|---|
 | 1 | The fake Terraform, a script that returns a list of exit codes and logs every command | I run it by hand and the log shows the codes and commands | F1, C2 | Planned |
-| 2 | The status engine's rules, as one function with a list of results as input | The examples in Section 2.2 give the expected status words | F2, F3, F4, C1 | Planned |
+| 2 | The status engine's rules, as one function with a list of results as input | The examples in Section 2.2 give the expected status words, and a stand-in that returns 0 twice still gets the freshness note | F2, F3, F4, C1, C3 | Planned |
 | 3 | The check runner, which starts a program with a time limit | A stuck fake is stopped at the limit and counts as a failed check | F1, F3 | Planned |
 | 4 | The history store in SQLite | A saved check is still there after the program is closed and run again | F5 | Planned |
 | 5 | The CLI that joins the parts and prints the report | One command on the fake gives the output in Section 5.2, Example 1 | F1 to F5 | Planned |
-| 6 | One small real Terraform project with local resources | The tool runs on it and I record what happens (A1, A3, A5) | A1, A3, A5 | The commands were tried by hand in E2 (9.3). The tool is not built yet |
+| 6 | One small real Terraform project with local resources | The tool runs on it and I compare its status with the drift I know about, because I made the change myself (A1, A3, A5) | A1, A3, A5 | The commands were tried by hand in E2 (9.3). The tool is not built yet |
 
 Section 10 will turn the checks into test plans. Reuse, simulation, and what is left out are in Section 4.2.
 
@@ -561,7 +578,26 @@ After the runs, I also opened `terraform.tfstate`. It still lists `local_file.de
 |---|---|---|
 | November 6, 2026 | First version. Added the problem, workflow image, stakeholders, and scope | Assignment 1 |
 | November 15, 2026 | Second version. Revised Section 1, wrote the requirements in Section 2, and drafted the comparison in Section 3 | Assignment 2. Replaced library evidence with HashiCorp's official exit code documentation, added a JSON output fallback, renamed requirements to the course scheme (F, C, Q), added Approach D evidence from the AWS API pages, and fixed an overlap between the retry and confirmation rules |
-| November 20, 2026 | Third version. Selected Approach C and wrote two decision records in Section 3, added the context and architecture views in Section 4, added the component table and the run_drift_check contract in Section 5, and began Section 9 with a build path and two experiments, E1 and E2 | Assignment 3. Decided to use only the exit code as the first signal and to save history in SQLite. E1 supported both the timeout rule and the SQLite choice. E2 confirmed A1, A2, and A5 for a deleted local file |
+| November 20, 2026 | Third version. Selected Approach C and wrote two decision records in Section 3, added the context and architecture views in Section 4, added the component table and the run_drift_check contract in Section 5, and began Section 9 with a build path and two experiments, E1 and E2 | Assignment 3. Decided to use only the exit code as the first signal and to save history in SQLite. E1 supported both the timeout rule and the SQLite choice. E2 confirmed A1, A2, and A5 for a deleted local file. Also answered the feedback from Assignments 1 and 2.|
+
+## Response to feedback
+
+This table lists the feedback from Assignments 1 and 2 and what I did about each item.
+
+| Feedback | From | What I changed | Where | Status |
+|---|---|---|---|---|
+| Show that failed or old readings matter to small Terraform teams | Assignments 1 and 2 | Kept the claim labeled as assumed, and said that a fake command cannot show how often real failures happen | Section 1, missing evidence | Unresolved. I still have no operator report |
+| Explain the distributed systems problem and the operator decision | Assignment 1 | Added a paragraph on the three parts that can fail separately and the decision the tool supports | Section 1 | Done |
+| Separate configuration, saved state, and live observation, and say what the tool compares | Assignment 1 | Defined the three terms. The tool compares the saved state with the live observation, not files with files | Section 1, Section 9.3 | Done. E2 only covered a deleted resource |
+| Two matching results do not prove freshness, and repeated checks are not independent | Assignments 1 and 2 | Added rule C3, a freshness note in the report, a limit in Section 2.5, and softer wording | Sections 1, 2.1, 2.5, 5.2 | Done in the design. The tool still cannot detect an old answer that repeats |
+| Reword F1 and define the report when there is no previous good result | Assignment 2 | Reworded F1, added the first run rule to F5, and added Example 5 | Sections 2.1, 5.2 | Done |
+| The zero false in sync target only tests the tool against its own rule | Assignment 2 | Limited Q1 to the sequence rules and added a check on a project with known drift | Sections 2.1, 9.1 | Partly done. The check is planned, not built |
+| Test a real controlled change and a failure | Assignment 1 | Ran experiment E2 on a small Terraform project | Section 9.3 | Done for one kind of drift. A stand-in that repeats a stale value is still planned |
+| Show the reference in the report | Assignment 1 | The last good check line now says what it was compared against | Section 5.2 | Done |
+| Update old dates and the empty image description | Assignment 2 | Updated the header and added alt text to the workflow image | Header, Section 1 | Done |
+| Keep scheduled CI for later | Assignment 1 | No change. It stays a stretch goal | Section 2.5 | Deferred |
+
+## Open questions
 
 | Open question | Why it matters | Next action |
 |---|---|---|
@@ -570,7 +606,7 @@ After the runs, I also opened `terraform.tfstate`. It still lists `local_file.de
 | Does a killed Terraform leave a state lock behind, and do the processes it starts stop when the time limit passes? | The check runner's time limit in F3 depends on it, and E1 only tested a simple stand-in | Test on a real Terraform project in Assignment 5 |
 | Should a failed save of the history count as unknown, and should the report separate "Terraform is not set up" from other failures? | They change the outcomes in Section 5.2 | Decide in Assignment 4 |
 
-**Assistance and reuse.** 
+**Assistance and reuse.**
 
 For Assignment 1, I used ChatGPT to help me better understand what the NSF was asking for to be built as the topic is new to me and I have limited experience with DevOps. 
 
