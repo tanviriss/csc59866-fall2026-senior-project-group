@@ -455,15 +455,15 @@ The tool exits with 64. No status word is printed and nothing is saved.
 
 # 6 Data structure design
 
-Not due yet.
+
 
 # 7 Algorithm design and execution
 
-Not due yet.
+
 
 # 8 Failures and security
 
-Not due yet.
+
 
 # 9 Implementation and feasibility
 
@@ -549,11 +549,11 @@ After the runs, I also opened `terraform.tfstate`. It still lists `local_file.de
 
 # 10 Testing and verification
 
-Not due yet.
+
 
 # 11 Operation maintenance and future work
 
-Not due yet.
+
 
 # 12 Revision history and references
 
