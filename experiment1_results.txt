@@ -1,0 +1,44 @@
+F1 rejected: [(99, 'asks for 10 GPUs; cluster has 8'), (100, 'run time must be positive and submit time not negative')]; accepted: [101]
+C1 fixture fifo: max GPUs in use 8; starts job1@0h, job2@0.5h, job3@1.0h
+C1 fixture fair: max GPUs in use 8; starts job1@0h, job2@0.5h, job3@1.0h
+
+BURST WORKLOAD (Ben 20x4GPU 6h @0, Ana 1x1GPU 0.5h @0:05, Chen 2x2GPU 3h @1:00)
+
+[fifo] C1 ok=True (max in use 8), C2 ok=True, total completion time 63.00 h, utilization 97.7%, Jain 0.478
+   Ana   longest wait  59.92 h  avg wait  59.92 h  max slowdown 120.83  avg slowdown 120.83
+   Ben   longest wait  54.00 h  avg wait  27.00 h  max slowdown  10.00  avg slowdown   5.50
+   Chen  longest wait  59.00 h  avg wait  59.00 h  max slowdown  20.67  avg slowdown  20.67
+   starts: B1@0.00, B2@0.00, B3@6.00, B4@6.00, B5@12.00, B6@12.00, B7@18.00, B8@18.00 ...
+
+[fair] C1 ok=True (max in use 8), C2 ok=True, total completion time 63.00 h, utilization 97.7%, Jain 0.735
+   Ana   longest wait   5.92 h  avg wait   5.92 h  max slowdown  12.83  avg slowdown  12.83
+   Ben   longest wait  57.00 h  avg wait  28.57 h  max slowdown  10.50  avg slowdown   5.76
+   Chen  longest wait   5.00 h  avg wait   5.00 h  max slowdown   2.67  avg slowdown   2.67
+   first decision at t=6h, fair-share factors: [(6.0, {'Ana': 1.0, 'Ben': 0.125, 'Chen': 1.0})]
+   starts: B1@0.00, B2@0.00, A21@6.00, C22@6.00, C23@6.00, B3@6.50, B4@9.00, B5@12.50 ...
+
+F5 repeat run identical: True
+
+BALANCED WORKLOAD, seeds 1-10 (worst user's max slowdown / worst longest wait / total completion time)
+  seed  1: FIFO  18.78 /   8.89 h /  36.86 h   FAIR  21.88 /  12.14 h /  35.47 h   slowdown cut -16.5%  completion change  -3.8%
+  seed  2: FIFO  14.00 /  11.33 h /  37.87 h   FAIR  21.81 /  20.81 h /  40.35 h   slowdown cut -55.8%  completion change  +6.5%
+  seed  3: FIFO  26.84 /  12.92 h /  36.02 h   FAIR  32.10 /  16.17 h /  37.02 h   slowdown cut -19.6%  completion change  +2.8%
+  seed  4: FIFO   8.98 /   6.04 h /  27.81 h   FAIR  18.76 /   9.80 h /  28.31 h   slowdown cut -108.9%  completion change  +1.8%
+  seed  5: FIFO   7.22 /   4.54 h /  27.99 h   FAIR   7.22 /   4.54 h /  27.99 h   slowdown cut   0.0%  completion change  +0.0%
+  seed  6: FIFO  18.74 /   8.87 h /  35.19 h   FAIR  29.64 /  14.95 h /  34.31 h   slowdown cut -58.2%  completion change  -2.5%
+  seed  7: FIFO   5.48 /   2.96 h /  29.71 h   FAIR  11.08 /   5.04 h /  29.71 h   slowdown cut -102.2%  completion change  +0.0%
+  seed  8: FIFO   4.58 /   5.12 h /  30.73 h   FAIR   4.14 /   6.28 h /  30.89 h   slowdown cut   9.6%  completion change  +0.5%
+  seed  9: FIFO  32.96 /  15.98 h /  33.21 h   FAIR  46.98 /  22.99 h /  33.72 h   slowdown cut -42.5%  completion change  +1.5%
+  seed 10: FIFO   5.94 /   2.88 h /  28.48 h   FAIR   5.94 /   5.76 h /  28.48 h   slowdown cut   0.0%  completion change  +0.0%
+
+HEAVY WORKLOAD, seeds 1-10 (worst user's max slowdown / worst longest wait / total completion time)
+  seed  1: FIFO  59.16 /  29.45 h /  51.00 h   FAIR  90.16 /  44.58 h /  51.50 h   slowdown cut -52.4%  completion change  +1.0%
+  seed  2: FIFO  61.60 /  30.30 h /  36.02 h   FAIR  51.32 /  29.57 h /  37.52 h   slowdown cut  16.7%  completion change  +4.2%
+  seed  3: FIFO  63.72 /  31.36 h /  45.14 h   FAIR  80.44 /  39.72 h /  43.61 h   slowdown cut -26.2%  completion change  -3.4%
+  seed  4: FIFO  29.58 /  22.32 h /  33.03 h   FAIR  36.16 /  27.36 h /  33.03 h   slowdown cut -22.2%  completion change  +0.0%
+  seed  5: FIFO  37.32 /  18.60 h /  31.02 h   FAIR  48.32 /  24.08 h /  29.52 h   slowdown cut -29.5%  completion change  -4.8%
+  seed  6: FIFO  49.42 /  27.68 h /  41.00 h   FAIR  60.94 /  31.36 h /  38.00 h   slowdown cut -23.3%  completion change  -7.3%
+  seed  7: FIFO  31.60 /  22.13 h /  35.54 h   FAIR  46.36 /  28.60 h /  36.42 h   slowdown cut -46.7%  completion change  +2.5%
+  seed  8: FIFO  41.16 /  20.27 h /  38.50 h   FAIR  29.66 /  28.17 h /  36.00 h   slowdown cut  27.9%  completion change  -6.5%
+  seed  9: FIFO  60.26 /  29.63 h /  41.00 h   FAIR  76.46 /  37.73 h /  40.60 h   slowdown cut -26.9%  completion change  -1.0%
+  seed 10: FIFO  31.86 /  16.19 h /  31.56 h   FAIR  51.86 /  26.19 h /  34.06 h   slowdown cut -62.8%  completion change  +7.9%
