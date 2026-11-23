@@ -202,6 +202,13 @@ except sqlite3.IntegrityError as error:
     print(type(error).__name__, error)
 c.execute("INSERT INTO results VALUES ('highway-001','v1','false') ON CONFLICT(image_id, model_version) DO NOTHING")
 print(c.execute("SELECT COUNT(*) FROM results WHERE image_id='highway-001' AND model_version='v1'").fetchone()[0])  # 1
+
+
+output:
+ IntegrityError UNIQUE constraint failed:
+results.image_id, results.model_version
+
+1
 ```
 
 **Pending FE-2 (not yet performed):** Run RabbitMQ + two real worker processes; log job IDs, worker IDs, delivery/retry count, timestamps, and database row count. Stop a worker after saving IMG-017/M1 but before acknowledging; verify redelivery, the attempt log, exactly one authoritative row, and completion/acknowledgment by the surviving worker; measure recovery against QT-2. Repeat a 20-image no-failure batch with one and two workers for QT-1. **No measured throughput or crash-recovery outcome is claimed yet.**
