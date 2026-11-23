@@ -105,7 +105,7 @@ The **pipeline developer / batch operator (primary user)** submits a fixed set o
 
 ```mermaid
 flowchart LR
-  O[Batch operator] -->|Submit fixed batch| S[Image processing system]
+  O[Batch operator] -->|Submit fixed batch| S[Machine Learning Model]
   S -->|Status and predictions| O
   M[Existing highway model and images] -->|Reused local assets| S
   W[External reports - deferred] -.-> F[Possible driver map - later]
